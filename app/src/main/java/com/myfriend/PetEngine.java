@@ -72,8 +72,31 @@ public final class PetEngine {
     private float bounceY = 0f;
     private float bounceVelY = 0f;
     private float squash = 0f;
-    private int chewStep = 0;
-    private long lastChewTime = 0L;
+    /** Quantos "eventos" da animação de comer/beber já aconteceram (mordidas, goles, final). */
+    private int mealFxStep = 0;
+    private static final long EAT_MS = 2700L;
+    private static final long DRINK_MS = 2700L;
+
+    // Rotina, humor do dia e sinais de fora
+    /** Cor atual do rostinho (olhos e boca). */
+    private Paint facePaint;
+    private boolean sulking = false;
+    private int personality = PERSONALITY_NORMAL;
+    private int cachedHour = 12;
+    private long lastMinuteCheck = 0L;
+    private long nextYawnTime = 0L;
+    private long nextHopTime = 0L;
+    private long lastLoveTime = 0L;
+    private long lastMailShownWall = 0L;
+    private long walkWindowStart = 0L;
+    private int walkWindowSteps = 0;
+    private long lastExcitedTime = -60_000L;
+    private int celebrateFxStep = 0;
+
+    // Toque duplo: passos e batimentos
+
+    /** Quadro "parado" (sem animação): 1 por segundo, alinhado à respiração. */
+    private static final long IDLE_FRAME_MS = 1000L;
 
     // Partículas (corações, Zzz, brilhos...)
     private final float[] partX = new float[MAX_PARTICLES];
@@ -98,6 +121,12 @@ public final class PetEngine {
         lastBatteryPollTime = now;
         nextBlinkTime = now + 2000L;
         nextSaccadeTime = now + 1500L;
+        lastLoveTime = now;
+        facePaint = grid.whitePaint;
+        refreshTimeOfDay(now);
+        nextYawnTime = now + yawnIntervalMs();
+        nextHopTime = now + 6000L;
+        lastMailShownWall = PetSignals.lastNotificationWall;
     }
 
     public void setWatchFaceMode(boolean watchFaceMode) {
@@ -118,10 +147,175 @@ public final class PetEngine {
         lastInteractionTime = now;
         lastBatteryPollTime = now;
         showDateInsteadOfClock = false;
+        refreshTimeOfDay(now);
+
+        long wall = PetClock.wallMillis();
+        int day = PetClock.dayKey();
+        boolean night = isNight(cachedHour);
+        boolean morning = cachedHour >= MORNING_HOUR && cachedHour < 12;
+        if ((state.nightSleep && !night) || (morning && state.stretchDay != day)) {
+            // Bom dia: acorda se espreguiçando.
+            state.stretchDay = day;
+            state.nightSleep = false;
+            state.isSleeping = false;
+            sulking = false;
+            startAction(MOOD_STRETCH, now, 2200L);
+            triggerBounce(-1.2f, -0.35f);
+            spawnParticle(PARTICLE_SPARKLE, 12, 12, now);
+            spawnParticle(PARTICLE_SPARKLE, 36, 10, now);
+        } else if (!state.isSleeping && !night && cachedHour >= 9 && state.lastSeenWall > 0L
+                && wall - state.lastSeenWall >= SULK_AFTER_MS) {
+            // Ficou horas sem ver ele: virou de costas emburrado.
+            sulking = true;
+        }
+        state.lastSeenWall = wall;
+        nextYawnTime = now + yawnIntervalMs();
     }
 
     public void onPause() {
+        state.lastSeenWall = PetClock.wallMillis();
+        if (isNight(PetClock.hour()) && !state.isSleeping) {
+            // Apagou a tela de noite: ele vai dormir sozinho.
+            state.isSleeping = true;
+            state.nightSleep = true;
+        }
         state.save();
+    }
+
+    // ================================================================= Sinais de fora (sensores)
+
+    /** Contador de passos do sistema (acumulado desde que o relógio ligou). */
+    public void onStepCounterTotal(float total) {
+        int day = PetClock.dayKey();
+        if (state.stepDay != day) {
+            state.stepDay = day;
+            state.stepBase = total;
+            state.stepsToday = 0;
+        } else if (state.lastStepCounter >= 0f && total < state.lastStepCounter) {
+            // Relógio reiniciou: o contador voltou a zero.
+            state.stepBase = total - state.stepsToday;
+        }
+        float delta = state.lastStepCounter >= 0f && total >= state.lastStepCounter
+                ? total - state.lastStepCounter : 0f;
+        state.lastStepCounter = total;
+        state.stepsToday = Math.max(0, Math.round(total - state.stepBase));
+
+        long now = SystemClock.uptimeMillis();
+        if (delta > 0f && delta < 200f) {
+            // Passos "ao vivo" (tela ligada): moedas e animação de caminhada.
+            onUserStep(Math.min(20, Math.round(delta)));
+            if (now - walkWindowStart > EXCITED_WINDOW_MS) {
+                walkWindowStart = now;
+                walkWindowSteps = 0;
+            }
+            walkWindowSteps += Math.round(delta);
+            if (walkWindowSteps >= EXCITED_STEPS && now - lastExcitedTime > 60_000L
+                    && !state.isSleeping && !isActionRunning(now)) {
+                lastExcitedTime = now;
+                startAction(MOOD_EXCITED, now, 2600L);
+                triggerBounce(-1.0f, -0.25f);
+            }
+        }
+        if (state.stepsToday >= STEP_GOAL && state.goalDay != day) {
+            state.goalDay = day;
+            state.coins += STEP_GOAL_REWARD;
+            state.isSleeping = false;
+            celebrateFxStep = 0;
+            startAction(MOOD_CELEBRATE, now, 3200L);
+            triggerBounce(-1.3f, -0.3f);
+            hapticPattern(new long[]{0, 60, 80, 60, 80, 160});
+            state.save();
+        }
+    }
+
+    /** Chacoalhou o pulso: fica tonto. */
+    public void onShake() {
+        long now = SystemClock.uptimeMillis();
+        if (shopOpen || sulking) {
+            return;
+        }
+        state.isSleeping = false;
+        lastInteractionTime = now;
+        startAction(MOOD_DIZZY, now, 2400L);
+        triggerBounce(-0.9f, 0.3f);
+        hapticPattern(new long[]{0, 40, 50, 40, 50, 40});
+    }
+
+    // ================================================================= Rotina e humor do dia
+
+    private static boolean isNight(int hour) {
+        return hour >= NIGHT_START_HOUR || hour < MORNING_HOUR;
+    }
+
+    /** Lê a hora (aloca um Calendar) no máximo uma vez por minuto. */
+    private void refreshTimeOfDay(long now) {
+        lastMinuteCheck = now;
+        cachedHour = PetClock.hour();
+        int day = PetClock.dayKey();
+        int mix = (int) ((day * 2654435761L) >>> 11);
+        personality = Math.floorMod(mix, 4);
+    }
+
+    private long yawnIntervalMs() {
+        long base = personality == PERSONALITY_LAZY ? 150_000L : 240_000L;
+        return base + (SystemClock.uptimeMillis() % 90_000L);
+    }
+
+    private boolean isActionRunning(long now) {
+        return actionMood != MOOD_NONE && now < actionMoodUntil;
+    }
+
+    /** Comportamentos espontâneos (só rodam com a tela ligada, junto dos quadros normais). */
+    private void updateRoutine(long now, boolean hudVisible) {
+        if (now - lastMinuteCheck >= 60_000L) {
+            refreshTimeOfDay(now);
+            // De noite, parado há um minuto: dorme sozinho.
+            if (isNight(cachedHour) && !state.isSleeping && !shopOpen
+                    && now - lastInteractionTime > 60_000L && !isActionRunning(now)) {
+                state.isSleeping = true;
+                state.nightSleep = true;
+                actionMood = MOOD_NONE;
+                state.save();
+            }
+        }
+
+        // Mensagem nova: segura o envelopinho.
+        long notif = PetSignals.lastNotificationWall;
+        if (notif > lastMailShownWall) {
+            lastMailShownWall = notif;
+            if (System.currentTimeMillis() - notif < 90_000L && !state.isSleeping && !shopOpen && !sulking) {
+                startAction(MOOD_MAIL, now, 3200L);
+                targetLookY = 2f;
+                triggerBounce(-0.9f, -0.2f);
+            }
+        }
+
+        if (state.isSleeping || shopOpen || sulking || isActionRunning(now)) {
+            return;
+        }
+        // Bocejo: à noitinha, quando está cansado ou no dia preguiçoso.
+        if (now >= nextYawnTime) {
+            nextYawnTime = now + yawnIntervalMs();
+            boolean evening = cachedHour >= EVENING_YAWN_HOUR || isNight(cachedHour);
+            if (evening || state.energy < 40f || personality == PERSONALITY_LAZY) {
+                startAction(MOOD_YAWN, now, 1800L);
+                return;
+            }
+        }
+        // Dia elétrico: pulinhos sozinho de vez em quando.
+        if (personality == PERSONALITY_HYPER && !hudVisible && now >= nextHopTime) {
+            nextHopTime = now + 7000L + (now % 4000L);
+            triggerBounce(-0.7f, -0.15f);
+        }
+    }
+
+    private Paint colorPaint(int colorItem) {
+        switch (colorItem) {
+            case COLOR_PINK: return grid.facePinkPaint;
+            case COLOR_CYAN: return grid.faceCyanPaint;
+            case COLOR_GOLD: return grid.faceGoldPaint;
+            default: return grid.whitePaint;
+        }
     }
 
     // ================================================================= Bateria e passos
@@ -214,6 +408,9 @@ public final class PetEngine {
         if (actionMood != MOOD_NONE && now < actionMoodUntil) {
             return actionMood;
         }
+        if (sulking && !shopOpen) {
+            return MOOD_SULK;
+        }
         if (forcedMood != MOOD_NONE) {
             return forcedMood;
         }
@@ -228,6 +425,9 @@ public final class PetEngine {
         }
         if (state.hunger < HUNGRY_THRESHOLD) {
             return MOOD_HUNGRY;
+        }
+        if (personality == PERSONALITY_NEEDY && now - lastLoveTime > NEEDY_AFTER_MS) {
+            return MOOD_NEEDY; // dia carente: pede carinho
         }
         if (state.energy < SLEEPY_THRESHOLD) {
             return MOOD_SLEEPY;
@@ -244,8 +444,9 @@ public final class PetEngine {
                 partType[i] = type;
                 partX[i] = x;
                 partY[i] = y;
-                partVy[i] = type == PARTICLE_SHOWER ? 0.45f : -0.35f; // chuveiro cai, o resto sobe
-                partExpire[i] = now + PARTICLE_LIFETIME_MS;
+                partVy[i] = type == PARTICLE_SHOWER ? 0.45f
+                        : type == PARTICLE_CRUMB ? 0.8f : -0.35f; // chuveiro e farelo caem, o resto sobe
+                partExpire[i] = now + (type == PARTICLE_CRUMB ? 450L : PARTICLE_LIFETIME_MS);
                 return;
             }
         }
@@ -273,13 +474,12 @@ public final class PetEngine {
             state.mealsSincePoop = 0;
             state.poopCount++;
         }
-        startAction(MOOD_EATING, now, 2000L);
-        chewStep = 0;
-        lastChewTime = now;
-        triggerBounce(-0.9f, 0.25f);
-        spawnParticle(PARTICLE_APPLE, 37, 16, now);
-        spawnParticle(PARTICLE_HEART, 11, 15, now);
-        hapticTick(25);
+        startAction(MOOD_EATING, now, EAT_MS);
+        mealFxStep = 0;
+        targetLookX = 2.5f; // olha a maçã chegando
+        targetLookY = 0.5f;
+        triggerBounce(-0.6f, 0.15f);
+        hapticTick(20);
         state.save();
     }
 
@@ -289,14 +489,12 @@ public final class PetEngine {
         state.water = 100f;
         state.happiness = PetState.clamp(state.happiness + 10f);
         state.coins += 8;
-        startAction(MOOD_DRINKING, now, 2400L);
-        chewStep = 0;
-        lastChewTime = now;
-        triggerBounce(-0.85f, -0.2f);
-        spawnParticle(PARTICLE_DROP, 11, 15, now);
-        spawnParticle(PARTICLE_DROP, 37, 13, now);
-        spawnParticle(PARTICLE_SPARKLE, 14, 11, now);
-        hapticPattern(new long[]{0, 35, 70, 35});
+        startAction(MOOD_DRINKING, now, DRINK_MS);
+        mealFxStep = 0;
+        targetLookX = 2.5f; // olha o copo chegando
+        targetLookY = 0.5f;
+        triggerBounce(-0.6f, -0.15f);
+        hapticTick(20);
         state.save();
     }
 
@@ -319,8 +517,10 @@ public final class PetEngine {
     private void lovePet(long now) {
         state.isSleeping = false;
         forcedMood = MOOD_NONE;
-        state.happiness = PetState.clamp(state.happiness + 22f);
-        state.coins += 3;
+        boolean wasNeedy = personality == PERSONALITY_NEEDY && now - lastLoveTime > NEEDY_AFTER_MS;
+        lastLoveTime = now;
+        state.happiness = PetState.clamp(state.happiness + (personality == PERSONALITY_NEEDY ? 33f : 22f));
+        state.coins += wasNeedy ? 8 : 3;
         startAction(now % 2L == 0L ? MOOD_LOVED : MOOD_WINK, now, 1800L);
         triggerBounce(-1.1f, -0.25f);
         spawnParticle(PARTICLE_HEART, (now % 7L) + 11, 15, now);
@@ -489,18 +689,21 @@ public final class PetEngine {
             hapticTick(15);
             return;
         }
-        if (fy > 0.86f) {
-            // Botão de baixo: comprar / usar.
-            buyOrEquipPreviewItem(now);
-            return;
-        }
-        if (fy > 0.72f) {
-            if (fx < 0.40f) {
-                selectShopCategory(CATEGORY_HEAD);
-            } else if (fx < 0.60f) {
-                selectShopCategory(CATEGORY_NOSE);
+        // Parte de baixo, perto da borda: abas em arco ou o botão de comprar no meio.
+        double dx = (fx - 0.5f) * GRID_SIZE;
+        double dy = (fy - 0.5f) * GRID_SIZE;
+        if (dy >= 4.0 && Math.hypot(dx, dy) >= SHOP_TAB_RADIUS - 6.0) {
+            double deg = Math.toDegrees(Math.atan2(dx, dy)); // 0 = embaixo, + = direita
+            if (Math.abs(deg) < SHOP_BUY_HALF_DEG) {
+                buyOrEquipPreviewItem(now);
             } else {
-                selectShopCategory(CATEGORY_EYES);
+                int nearest = 0;
+                for (int c = 1; c < CATEGORY_COUNT; c++) {
+                    if (Math.abs(deg - SHOP_TAB_DEG[c]) < Math.abs(deg - SHOP_TAB_DEG[nearest])) {
+                        nearest = c;
+                    }
+                }
+                selectShopCategory(nearest);
             }
             return;
         }
@@ -516,7 +719,19 @@ public final class PetEngine {
     }
 
     private void handlePetTap(float fx, float fy, boolean wasIdle, long now) {
-        if (wasIdle && (fy < 0.28f || fy > 0.73f)) {
+        if (sulking) {
+            // Emburrado: o toque faz ele se virar todo feliz.
+            sulking = false;
+            state.isSleeping = false;
+            startAction(MOOD_LOVED, now, 1800L);
+            triggerBounce(-1.2f, -0.3f);
+            spawnParticle(PARTICLE_HEART, 12, 14, now);
+            spawnParticle(PARTICLE_HEART, 35, 12, now);
+            hapticPattern(new long[]{0, 30, 60, 30});
+            return;
+        }
+        int actionIcon = actionIconAt(fx, fy);
+        if (wasIdle && (fy < 0.28f || actionIcon >= 0)) {
             // Primeiro toque nas bordas só mostra relógio/barras/botões (que estavam escondidos).
             triggerBounce(-0.4f, 0.1f);
             hapticTick(10);
@@ -527,21 +742,17 @@ public final class PetEngine {
             hapticTick(12);
             return;
         }
-        if (state.poopCount > 0 && fx < 0.3f && fy > 0.48f && fy <= 0.74f) {
+        if (state.poopCount > 0 && fx < 0.25f && fy > 0.36f && fy <= 0.62f) {
             cleanPoopShower(now);
         }
-        if (fy > 0.73f) {
-            // Barra de ações.
-            if (fx < 0.27f) {
-                feedPet(now);
-            } else if (fx < 0.42f) {
-                giveWater(now);
-            } else if (fx < 0.58f) {
-                lovePet(now);
-            } else if (fx < 0.73f) {
-                toggleSleep(now);
-            } else {
-                toggleShop();
+        if (actionIcon >= 0) {
+            // Ícones em arco na borda de baixo.
+            switch (actionIcon) {
+                case 0: feedPet(now); break;
+                case 1: giveWater(now); break;
+                case 2: lovePet(now); break;
+                case 3: toggleSleep(now); break;
+                default: toggleShop(); break;
             }
             return;
         }
@@ -556,8 +767,13 @@ public final class PetEngine {
             state.isSleeping = false;
             startAction(MOOD_SURPRISED, now, 1100L);
             triggerBounce(-0.9f, -0.25f);
-        } else if (rapidPokeCount >= 5) {
-            startAction(MOOD_GRUMPY, now, 1800L);
+        } else if (actionMood == MOOD_GRUMPY && now < actionMoodUntil) {
+            // Já está bravo: cutucar mais só aumenta a birra (carinho acalma).
+            actionMoodUntil = Math.min(now + GRUMPY_MAX_MS, actionMoodUntil + GRUMPY_EXTRA_PER_POKE_MS);
+            triggerBounce(-0.6f, 0.3f);
+            hapticTick(35);
+        } else if (rapidPokeCount >= GRUMPY_POKES) {
+            startAction(MOOD_GRUMPY, now, GRUMPY_MS);
             triggerBounce(-0.8f, 0.3f);
             hapticTick(35);
         } else {
@@ -582,6 +798,7 @@ public final class PetEngine {
             state.coins++;
             actionMood = MOOD_LOVED;
             actionMoodUntil = now + 1500L;
+            lastLoveTime = now;
             squash = 0.22f;
             spawnParticle(PARTICLE_HEART, (now % 26L) + 11, 14, now);
             hapticTick(12);
@@ -604,9 +821,7 @@ public final class PetEngine {
         long now = SystemClock.uptimeMillis();
 
         if (ambient) {
-            accessories.drawClockHHMM(canvas, 6, 0L, grid.whitePaint);
-            drawEyes(canvas, 20, 31, FACE_TOP + 7, MOOD_SLEEPING, now);
-            drawMouth(canvas, 25, FACE_TOP + 7 + MOUTH_OFFSET, MOOD_SLEEPING, now);
+            drawAmbient(canvas, width, height);
             return 60_000L;
         }
 
@@ -620,29 +835,51 @@ public final class PetEngine {
         float physDt = Math.min(0.05f, realDt);
         lastFrameTime = now;
 
+        boolean hudVisible = now - lastInteractionTime < HUD_VISIBLE_MS;
         updateStatsAndAlerts(realDt, now);
+        updateRoutine(now, hudVisible);
         int mood = getCurrentMood(now);
         updateEyesAndBounce(physDt, now);
+        facePaint = colorPaint(shownItem(CATEGORY_COLOR));
 
-        // Zzz quando está dormindo.
-        if (mood == MOOD_SLEEPING && now / 900L != (now - 30L) / 900L) {
+        // Zzz quando está dormindo (um a cada 1,8 s).
+        if (mood == MOOD_SLEEPING && now / 1800L != lastZzzSlot) {
+            lastZzzSlot = now / 1800L;
             spawnParticle(PARTICLE_Z, (int) (now % 4L) + 34, 17, now);
         }
+        // Animado com a caminhada: pulinhos seguidos.
+        if (mood == MOOD_EXCITED && bounceY == 0f && bounceVelY == 0f) {
+            triggerBounce(-0.8f, -0.15f);
+        }
+        // Meta de passos: confete.
+        if (mood == MOOD_CELEBRATE) {
+            int slot = (int) ((now - actionStartTime) / 450L);
+            if (slot >= celebrateFxStep && slot < 6) {
+                celebrateFxStep = slot + 1;
+                spawnParticle(slot % 2 == 0 ? PARTICLE_SPARKLE : PARTICLE_HEART, 8 + (slot * 7) % 34, 12 + slot % 3, now);
+            }
+        }
+
+        // Fundo comprado na loja (bem apagadinho).
+        accessories.drawBackground(canvas, shownItem(CATEGORY_BG), now);
 
         // ---- Posição do rosto (só rosto, sem corpo)
-        int breathe = (mood == MOOD_SLEEPING || (now / 900L) % 2L != 0L) ? 1 : 0;
+        int breathe = (mood == MOOD_SLEEPING || (now / IDLE_FRAME_MS) % 2L != 0L) ? 1 : 0;
         int sway = shopOpen ? 0 : clampInt(Math.round(lookX * 0.4f), -1, 1);
+        if (mood == MOOD_DIZZY) {
+            sway = (now / 140L) % 2L == 0L ? -1 : 1; // cambaleando
+        }
         int cx = 25 + sway;
         int squashX = Math.round(squash * 3f);
         int squashY = Math.round(squash * 2f);
-        int head = FACE_TOP + Math.round(bounceY) + breathe + squashY;
+        int head = FACE_TOP + Math.round(bounceY) + breathe + squashY - (shopOpen ? SHOP_FACE_LIFT : 0);
         int eyeY = head + 7;
         int lx = cx - 5 - squashX;
         int rx = cx + 6 + squashX;
+        int mouthY = eyeY + MOUTH_OFFSET;
 
         // Sozinho por um tempo: o rostinho cresce para ocupar a tela.
-        boolean hudVisible = now - lastInteractionTime < HUD_VISIBLE_MS;
-        float zoomTarget = (!shopOpen && !hudVisible) ? IDLE_FACE_ZOOM : 1f;
+        float zoomTarget = (!shopOpen && !hudVisible && mood != MOOD_MAIL) ? IDLE_FACE_ZOOM : 1f;
         faceZoom += (zoomTarget - faceZoom) * Math.min(1f, physDt * 7f);
         if (Math.abs(zoomTarget - faceZoom) < 0.004f) {
             faceZoom = zoomTarget;
@@ -650,28 +887,39 @@ public final class PetEngine {
         canvas.save();
         canvas.scale(faceZoom, faceZoom, width * 0.5f, height * (FACE_ZOOM_PIVOT_ROW / GRID_SIZE));
 
-        drawCheeks(canvas, cx, eyeY);
-        drawEyes(canvas, lx, rx, eyeY, mood, now);
-        drawMouth(canvas, cx, eyeY + MOUTH_OFFSET, mood, now);
-
         // ---- Acessórios (na loja mostra a pré-visualização)
         int headItem = shownItem(CATEGORY_HEAD);
         boolean walking = now - lastStepTime < WALKING_WINDOW_MS;
         if (!shopOpen && walking && headItem == ITEM_NONE) {
             headItem = HEAD_HEADBAND; // faixa de academia enquanto caminha
         }
-        accessories.drawNoseItem(canvas, cx, eyeY, shownItem(CATEGORY_NOSE));
-        accessories.drawEyesItem(canvas, lx, rx, eyeY, cx, shownItem(CATEGORY_EYES));
-        accessories.drawHeadItem(canvas, cx, eyeY, headItem);
+        if (mood == MOOD_SULK) {
+            accessories.drawSulkBack(canvas, cx, eyeY, now);
+            accessories.drawHeadItem(canvas, cx, eyeY, headItem);
+        } else {
+            drawCheeks(canvas, cx, eyeY);
+            drawEyes(canvas, lx, rx, eyeY, mood, now);
+            drawMouth(canvas, cx, mouthY, mood, now);
+            int neck = shownItem(CATEGORY_NECK);
+            boolean mouthBusy = mood == MOOD_EATING || mood == MOOD_DRINKING || mood == MOOD_YAWN;
+            if (!(neck == NECK_PACIFIER && mouthBusy)) {
+                accessories.drawNeckItem(canvas, cx, mouthY, neck);
+            }
+            accessories.drawNoseItem(canvas, cx, eyeY, shownItem(CATEGORY_NOSE));
+            accessories.drawEyesItem(canvas, lx, rx, eyeY, cx, shownItem(CATEGORY_EYES));
+            accessories.drawHeadItem(canvas, cx, eyeY, headItem);
+            drawMealProps(canvas, mood, cx, mouthY, now);
+            drawMoodExtras(canvas, mood, cx, eyeY, mouthY, now);
+        }
         canvas.restore();
 
         if (state.poopCount > 0 && !shopOpen) {
-            accessories.drawPoop(canvas, 5, 34, now);
+            accessories.drawPoop(canvas, 4, 25, now);
         }
 
 
         accessories.drawMoodProps(canvas, mood, cx, head, shopOpen, actionStartTime, now);
-        boolean anyParticle = updateAndDrawParticles(canvas, physDt, now);
+        int particles = updateAndDrawParticles(canvas, physDt, now);
 
         if (shopOpen) {
             drawShopOverlay(canvas);
@@ -679,18 +927,47 @@ public final class PetEngine {
             drawMinimalHud(canvas, now);
         }
 
-        boolean animating = isBlinking
-                || anyParticle
-                || Math.abs(bounceY) > 0.05f
+        return nextFrameDelay(now, hudVisible, zoomTarget, particles, mood == MOOD_SLEEPING);
+    }
+
+    /**
+     * Quanto esperar até o próximo quadro. Para gastar pouca bateria, só anima a 60 fps
+     * durante movimento de verdade; parado, acorda só nos eventos (piscar, olhar) ou a cada 1 s.
+     */
+    private long nextFrameDelay(long now, boolean hudVisible, float zoomTarget, int particles, boolean sleeping) {
+        boolean moving = Math.abs(bounceY) > 0.05f
                 || Math.abs(squash) > 0.02f
                 || Math.abs(zoomTarget - faceZoom) > 0f
                 || Math.abs(targetLookX - lookX) > 0.15f
                 || Math.abs(targetLookY - lookY) > 0.15f
-                || (actionMood != MOOD_NONE && now < actionMoodUntil);
-        if (animating) {
+                || isActionRunning(now);
+        if (moving) {
             return 16L;
         }
-        return (shopOpen || hudVisible) ? 200L : 500L;
+        if (particles == PARTICLES_MOVING) {
+            return 90L;
+        }
+        long delay;
+        if (shopOpen || hudVisible) {
+            delay = 500L - now % 500L; // dois pontinhos do relógio piscando
+        } else {
+            delay = IDLE_FRAME_MS - now % IDLE_FRAME_MS; // respiração
+        }
+        if (particles == PARTICLES_SLOW) {
+            delay = Math.min(delay, 500L); // só Zzz subindo devagar
+        }
+        if (!sleeping) {
+            // Dormindo de olho fechado não precisa acordar a tela para piscar nem olhar.
+            delay = Math.min(delay, (isBlinking ? blinkEndTime : nextBlinkTime) - now);
+            if (!hudVisible && !shopOpen) {
+                delay = Math.min(delay, nextSaccadeTime - now);
+            }
+        }
+        if (hudVisible || shopOpen) {
+            // Redesenha exatamente quando o HUD some.
+            delay = Math.min(delay, lastInteractionTime + HUD_VISIBLE_MS - now);
+        }
+        return Math.max(16L, Math.min(IDLE_FRAME_MS, delay));
     }
 
     private void updateStatsAndAlerts(float realDt, long now) {
@@ -722,7 +999,8 @@ public final class PetEngine {
         }
 
         // Olhar para os lados sozinho quando ninguém mexe.
-        if (now >= nextSaccadeTime && now - lastInteractionTime > 1200L) {
+        boolean eatingOrDrinking = (actionMood == MOOD_EATING || actionMood == MOOD_DRINKING) && now < actionMoodUntil;
+        if (!eatingOrDrinking && now >= nextSaccadeTime && now - lastInteractionTime > 1200L) {
             switch ((int) ((now / 173L) % 7L)) {
                 case 0: targetLookX = -2.2f; targetLookY = 0f; break;
                 case 1: targetLookX = 2.2f; targetLookY = 0f; break;
@@ -731,7 +1009,11 @@ public final class PetEngine {
                 case 4: targetLookX = 1.5f; targetLookY = 1.2f; break;
                 default: targetLookX = 0f; targetLookY = 0f; break;
             }
-            nextSaccadeTime = now + 2200L + (now % 2000L);
+            long gap = personality == PERSONALITY_HYPER ? 1300L : personality == PERSONALITY_LAZY ? 4200L : 2200L;
+            nextSaccadeTime = now + gap + (now % 2000L);
+            // Olhar sozinho é um "pulo" de pixel: sem quadros intermediários (economiza bateria).
+            lookX = targetLookX;
+            lookY = targetLookY;
         }
 
         float follow = Math.min(1f, 12f * dt);
@@ -748,8 +1030,14 @@ public final class PetEngine {
         squash *= 0.84f;
     }
 
-    private boolean updateAndDrawParticles(Canvas canvas, float dt, long now) {
-        boolean any = false;
+    private static final int PARTICLES_NONE = 0;
+    private static final int PARTICLES_SLOW = 1;
+    private static final int PARTICLES_MOVING = 2;
+    private long lastZzzSlot = -1L;
+
+    /** @return {@link #PARTICLES_NONE}, {@link #PARTICLES_SLOW} (só Zzz) ou {@link #PARTICLES_MOVING} */
+    private int updateAndDrawParticles(Canvas canvas, float dt, long now) {
+        int result = PARTICLES_NONE;
         for (int i = 0; i < MAX_PARTICLES; i++) {
             if (now >= partExpire[i]) {
                 continue;
@@ -770,13 +1058,20 @@ public final class PetEngine {
                 case PARTICLE_APPLE:
                     accessories.drawApple(canvas, x, y);
                     break;
+                case PARTICLE_CRUMB:
+                    grid.px(canvas, x, y, (i & 1) == 0 ? grid.redPaint : grid.goldPaint);
+                    break;
                 default: // gota / chuveiro
                     grid.drawSprite5x5(canvas, x, y, SPRITE_WATER_DROP, grid.cyanPaint);
                     break;
             }
-            any = true;
+            if (partType[i] == PARTICLE_Z) {
+                result = Math.max(result, PARTICLES_SLOW);
+            } else {
+                result = PARTICLES_MOVING;
+            }
         }
-        return any;
+        return result;
     }
 
     // ================================================================= Desenho: Rosto (olhos, bochechas e boca)
@@ -787,7 +1082,9 @@ public final class PetEngine {
     private static final int MOUTH_OFFSET = 6;
     /** Quanto o rosto cresce quando está sozinho, e a linha da grade que fica parada no zoom. */
     private static final float IDLE_FACE_ZOOM = 1.55f;
-    private static final float FACE_ZOOM_PIVOT_ROW = 25.5f;
+    private static final float FACE_ZOOM_PIVOT_ROW = 28f;
+    /** Na loja o rosto sobe um pouco para caber o item de pescoço acima das abas. */
+    private static final int SHOP_FACE_LIFT = 3;
 
     private static int clampInt(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
@@ -811,17 +1108,30 @@ public final class PetEngine {
             return;
         }
         if (isBlinking) {
-            grid.hline(canvas, leftX - 2, leftX + 2, y, grid.whitePaint);
-            grid.hline(canvas, rightX - 2, rightX + 2, y, grid.whitePaint);
+            grid.hline(canvas, leftX - 2, leftX + 2, y, facePaint);
+            grid.hline(canvas, rightX - 2, rightX + 2, y, facePaint);
             return;
         }
         switch (mood) {
             case MOOD_LOVED:
-            case MOOD_DRINKING:
             case MOOD_SHOWERING:
                 drawHappyArcEye(canvas, leftX, y);
                 drawHappyArcEye(canvas, rightX, y);
                 break;
+
+            case MOOD_EATING:
+            case MOOD_DRINKING: {
+                // Olhos abertos vendo a comida chegar; depois fecha de gostoso "^^".
+                long arrive = mood == MOOD_EATING ? EAT_ARRIVE_MS : DRINK_ARRIVE_MS;
+                if (now - actionStartTime < arrive) {
+                    drawOvalEye(canvas, leftX, y, false);
+                    drawOvalEye(canvas, rightX, y, false);
+                } else {
+                    drawHappyArcEye(canvas, leftX, y);
+                    drawHappyArcEye(canvas, rightX, y);
+                }
+                break;
+            }
 
             case MOOD_HUNGRY:
             case MOOD_SAD:
@@ -829,10 +1139,10 @@ public final class PetEngine {
                 drawOvalEye(canvas, leftX, y, true);
                 drawOvalEye(canvas, rightX, y, true);
                 // Sobrancelhas tristes (ponta de dentro levantada).
-                grid.hline(canvas, leftX - 2, leftX - 1, y - 4, grid.whitePaint);
-                grid.hline(canvas, leftX, leftX + 1, y - 5, grid.whitePaint);
-                grid.hline(canvas, rightX + 1, rightX + 2, y - 4, grid.whitePaint);
-                grid.hline(canvas, rightX - 1, rightX, y - 5, grid.whitePaint);
+                grid.hline(canvas, leftX - 2, leftX - 1, y - 4, facePaint);
+                grid.hline(canvas, leftX, leftX + 1, y - 5, facePaint);
+                grid.hline(canvas, rightX + 1, rightX + 2, y - 4, facePaint);
+                grid.hline(canvas, rightX - 1, rightX, y - 5, facePaint);
                 if (mood != MOOD_HUNGRY) {
                     // Lágrima escorrendo.
                     int tearY = y + 1 + (int) ((now / 250L) % 3L);
@@ -861,18 +1171,68 @@ public final class PetEngine {
                 drawOvalEye(canvas, rightX, y, false);
                 break;
 
+            case MOOD_STRETCH:
+            case MOOD_CELEBRATE:
+                drawHappyArcEye(canvas, leftX, y);
+                drawHappyArcEye(canvas, rightX, y);
+                break;
+
+            case MOOD_EXCITED:
+                // Olhos de estrela.
+                grid.drawSprite5x5(canvas, leftX - 2, y - 2, SPRITE_SPARKLE, grid.goldPaint);
+                grid.drawSprite5x5(canvas, rightX - 2, y - 2, SPRITE_SPARKLE, grid.goldPaint);
+                break;
+
+            case MOOD_DIZZY: {
+                int[] spiral = (now / 150L) % 2L == 0L ? SPRITE_SPIRAL_A : SPRITE_SPIRAL_B;
+                grid.drawSprite5x5(canvas, leftX - 2, y - 2, spiral, facePaint);
+                grid.drawSprite5x5(canvas, rightX - 2, y - 2, spiral, facePaint);
+                break;
+            }
+
+            case MOOD_YAWN: {
+                long t = now - actionStartTime;
+                if (t < 300L || t >= 1400L) {
+                    drawHalfClosedEye(canvas, leftX, y);
+                    drawHalfClosedEye(canvas, rightX, y);
+                    if (t >= 1400L) {
+                        grid.px(canvas, leftX - 3, y + 1, grid.cyanPaint); // lagriminha do bocejo
+                    }
+                } else {
+                    drawSleepingEye(canvas, leftX, y);
+                    drawSleepingEye(canvas, rightX, y);
+                }
+                break;
+            }
+
+            case MOOD_MAIL:
+                drawSurprisedEye(canvas, leftX, y);
+                drawSurprisedEye(canvas, rightX, y);
+                break;
+
+            case MOOD_NEEDY:
+                // Olhinhos de cachorro pidão.
+                drawOvalEye(canvas, leftX, y, true);
+                drawOvalEye(canvas, rightX, y, true);
+                break;
+
             default:
-                drawOvalEye(canvas, leftX, y, false);
-                drawOvalEye(canvas, rightX, y, false);
+                if (personality == PERSONALITY_LAZY && (now / 5000L) % 3L == 0L) {
+                    drawHalfClosedEye(canvas, leftX, y); // dia preguiçoso: olho caído
+                    drawHalfClosedEye(canvas, rightX, y);
+                } else {
+                    drawOvalEye(canvas, leftX, y, false);
+                    drawOvalEye(canvas, rightX, y, false);
+                }
                 break;
         }
     }
 
     /** Contorno oval 5x6 preenchido de branco (base dos olhos). */
     private void fillOval(Canvas canvas, int x, int y) {
-        grid.hline(canvas, x - 1, x + 1, y - 3, grid.whitePaint);
-        grid.rectPx(canvas, x - 2, y - 2, x + 2, y + 1, grid.whitePaint);
-        grid.hline(canvas, x - 1, x + 1, y + 2, grid.whitePaint);
+        grid.hline(canvas, x - 1, x + 1, y - 3, facePaint);
+        grid.rectPx(canvas, x - 2, y - 2, x + 2, y + 1, facePaint);
+        grid.hline(canvas, x - 1, x + 1, y + 2, facePaint);
     }
 
     /** Olho oval branco com pupila 3x3 que segue o olhar e um brilho (dois quando triste). */
@@ -888,38 +1248,38 @@ public final class PetEngine {
     }
 
     private void drawSleepingEye(Canvas canvas, int x, int y) {
-        grid.px(canvas, x - 2, y, grid.whitePaint);
-        grid.hline(canvas, x - 1, x + 1, y + 1, grid.whitePaint);
-        grid.px(canvas, x + 2, y, grid.whitePaint);
+        grid.px(canvas, x - 2, y, facePaint);
+        grid.hline(canvas, x - 1, x + 1, y + 1, facePaint);
+        grid.px(canvas, x + 2, y, facePaint);
     }
 
     /** Olho feliz "∩". */
     private void drawHappyArcEye(Canvas canvas, int x, int y) {
-        grid.hline(canvas, x - 1, x + 1, y - 1, grid.whitePaint);
-        grid.px(canvas, x - 2, y, grid.whitePaint);
-        grid.px(canvas, x + 2, y, grid.whitePaint);
-        grid.px(canvas, x - 2, y + 1, grid.whitePaint);
-        grid.px(canvas, x + 2, y + 1, grid.whitePaint);
+        grid.hline(canvas, x - 1, x + 1, y - 1, facePaint);
+        grid.px(canvas, x - 2, y, facePaint);
+        grid.px(canvas, x + 2, y, facePaint);
+        grid.px(canvas, x - 2, y + 1, facePaint);
+        grid.px(canvas, x + 2, y + 1, facePaint);
     }
 
     private void drawHalfClosedEye(Canvas canvas, int x, int y) {
-        grid.hline(canvas, x - 2, x + 2, y, grid.whitePaint);
-        grid.hline(canvas, x - 2, x + 2, y + 1, grid.whitePaint);
-        grid.hline(canvas, x - 1, x + 1, y + 2, grid.whitePaint);
+        grid.hline(canvas, x - 2, x + 2, y, facePaint);
+        grid.hline(canvas, x - 2, x + 2, y + 1, facePaint);
+        grid.hline(canvas, x - 1, x + 1, y + 2, facePaint);
         grid.px(canvas, x, y + 1, grid.blackPaint);
     }
 
     private void drawGrumpyEye(Canvas canvas, int x, int y, boolean leftSide) {
-        grid.rectPx(canvas, x - 2, y - 1, x + 2, y + 1, grid.whitePaint);
-        grid.hline(canvas, x - 1, x + 1, y + 2, grid.whitePaint);
+        grid.rectPx(canvas, x - 2, y - 1, x + 2, y + 1, facePaint);
+        grid.hline(canvas, x - 1, x + 1, y + 2, facePaint);
         grid.px(canvas, x, y, grid.blackPaint);
         // Sobrancelha franzida descendo para o meio do rosto.
         int dir = leftSide ? 1 : -1;
-        grid.px(canvas, x - 2 * dir, y - 4, grid.whitePaint);
-        grid.px(canvas, x - dir, y - 4, grid.whitePaint);
-        grid.px(canvas, x, y - 3, grid.whitePaint);
-        grid.px(canvas, x + dir, y - 3, grid.whitePaint);
-        grid.px(canvas, x + 2 * dir, y - 2, grid.whitePaint);
+        grid.px(canvas, x - 2 * dir, y - 4, facePaint);
+        grid.px(canvas, x - dir, y - 4, facePaint);
+        grid.px(canvas, x, y - 3, facePaint);
+        grid.px(canvas, x + dir, y - 3, facePaint);
+        grid.px(canvas, x + 2 * dir, y - 2, facePaint);
     }
 
     /** Olho arregalado: oval branco com pupilinha de 1 pixel. */
@@ -931,7 +1291,7 @@ public final class PetEngine {
 
     /** Boquinha centrada entre cx e cx + 1. */
     private void drawMouth(Canvas canvas, int cx, int y, int mood, long now) {
-        Paint ink = grid.whitePaint;
+        Paint ink = facePaint;
         switch (mood) {
             case MOOD_LOVED:
             case MOOD_SHOWERING:
@@ -978,19 +1338,33 @@ public final class PetEngine {
                 grid.px(canvas, cx + 2, y, ink);
                 break;
 
-            case MOOD_EATING:
-                if (now - lastChewTime > 200L) {
-                    chewStep = (chewStep + 1) % 2;
-                    lastChewTime = now;
-                }
-                if (chewStep != 0) {
-                    grid.hline(canvas, cx - 1, cx + 2, y + 1, ink);
+            case MOOD_EATING: {
+                long t = now - actionStartTime;
+                if (t < EAT_ARRIVE_MS) {
+                    drawBigOpenMouth(canvas, cx, y);          // "aaah" esperando a maçã
+                } else if (t < EAT_CHEW_END_MS) {
+                    long sub = (t - EAT_ARRIVE_MS) % EAT_BITE_MS;
+                    if (sub < 140L) {
+                        drawBigOpenMouth(canvas, cx, y);      // nhac!
+                    } else {
+                        // Mastigando: boquinha ondulada subindo e descendo.
+                        int up = ((sub / 110L) % 2L == 0L) ? 0 : 1;
+                        grid.px(canvas, cx - 1, y + 1 - up, ink);
+                        grid.hline(canvas, cx, cx + 1, y + up, ink);
+                        grid.px(canvas, cx + 2, y + 1 - up, ink);
+                    }
                 } else {
-                    grid.hline(canvas, cx, cx + 1, y, ink);
-                    grid.hline(canvas, cx - 1, cx + 2, y + 1, ink);
-                    grid.hline(canvas, cx, cx + 1, y + 2, ink);
+                    // Lambendo os beiços.
+                    grid.px(canvas, cx - 1, y, ink);
+                    grid.hline(canvas, cx, cx + 1, y + 1, ink);
+                    grid.px(canvas, cx + 2, y, ink);
+                    grid.px(canvas, cx + 2, y + 1, grid.pinkPaint);
+                    if ((t / 150L) % 2L == 0L) {
+                        grid.px(canvas, cx + 3, y + 1, grid.pinkPaint);
+                    }
                 }
                 break;
+            }
 
             case MOOD_WINK:
                 // Boquinha de gato "w".
@@ -1001,12 +1375,61 @@ public final class PetEngine {
                 grid.px(canvas, cx + 3, y, ink);
                 break;
 
-            case MOOD_DRINKING:
-                drawOMouth(canvas, cx, y);
-                if ((now / 180L) % 2L == 0L) {
-                    grid.px(canvas, cx + 3, y + 1, grid.cyanPaint);
-                    grid.px(canvas, cx + 4, y + 1, grid.cyanPaint);
+            case MOOD_DRINKING: {
+                long t = now - actionStartTime;
+                if (t < DRINK_SIP_END_MS) {
+                    drawOMouth(canvas, cx, y);                // biquinho no canudo
+                } else {
+                    // "Aaah!" satisfeito, com uma gotinha escorrendo no canto da boca.
+                    drawBigOpenMouth(canvas, cx, y);
+                    int drip = (int) Math.min(2L, (t - DRINK_SIP_END_MS) / 150L);
+                    grid.px(canvas, cx - 2, y + 2 + drip, grid.cyanPaint);
                 }
+                break;
+            }
+
+            case MOOD_STRETCH:
+            case MOOD_CELEBRATE:
+            case MOOD_EXCITED:
+                drawBigOpenMouth(canvas, cx, y);
+                break;
+
+            case MOOD_DIZZY:
+                // Boquinha ondulada.
+                grid.px(canvas, cx - 2, y + 1, ink);
+                grid.px(canvas, cx - 1, y, ink);
+                grid.px(canvas, cx, y + 1, ink);
+                grid.px(canvas, cx + 1, y, ink);
+                grid.px(canvas, cx + 2, y + 1, ink);
+                grid.px(canvas, cx + 3, y, ink);
+                break;
+
+            case MOOD_YAWN: {
+                long t = now - actionStartTime;
+                if (t < 300L || t >= 1500L) {
+                    drawOMouth(canvas, cx, y);
+                } else {
+                    // Bocejão: boca alta com linguinha.
+                    grid.hline(canvas, cx, cx + 1, y - 1, ink);
+                    for (int row = y; row <= y + 3; row++) {
+                        grid.px(canvas, cx - 1, row, ink);
+                        grid.px(canvas, cx + 2, row, ink);
+                    }
+                    grid.hline(canvas, cx, cx + 1, y + 3, grid.pinkPaint);
+                    grid.hline(canvas, cx, cx + 1, y + 4, ink);
+                }
+                break;
+            }
+
+            case MOOD_MAIL:
+                drawOMouth(canvas, cx, y);
+                break;
+
+            case MOOD_NEEDY:
+                // Biquinho pidão.
+                grid.hline(canvas, cx, cx + 1, y + 1, ink);
+                grid.px(canvas, cx - 1, y, ink);
+                grid.px(canvas, cx + 2, y, ink);
                 break;
 
             default:
@@ -1018,11 +1441,183 @@ public final class PetEngine {
         }
     }
 
+    // ---- Animação de comer e beber (fases pelo tempo desde o começo da ação)
+    private static final long EAT_ARRIVE_MS = 450L;
+    private static final long EAT_BITE_MS = 400L;
+    private static final long EAT_CHEW_END_MS = EAT_ARRIVE_MS + 4 * EAT_BITE_MS;
+    private static final long DRINK_ARRIVE_MS = 400L;
+    private static final long DRINK_SIP_END_MS = 2100L;
+
+    /** Desacelera no fim (chega devagarinho). */
+    private static float easeOut(float p) {
+        float q = 1f - Math.max(0f, Math.min(1f, p));
+        return 1f - q * q * q;
+    }
+
+    /** Maçã chegando e sendo mordida / copo com canudinho, colados na boca. */
+    private void drawMealProps(Canvas canvas, int mood, int cx, int mouthY, long now) {
+        long t = now - actionStartTime;
+        if (mood == MOOD_EATING) {
+            int ax = cx + 3;
+            int ay = mouthY - 3;
+            if (t < EAT_ARRIVE_MS) {
+                float rest = 1f - easeOut(t / (float) EAT_ARRIVE_MS);
+                accessories.drawApple(canvas, Math.round(ax + 14 * rest), Math.round(ay - 7 * rest));
+            } else if (t < EAT_CHEW_END_MS) {
+                long into = t - EAT_ARRIVE_MS;
+                int bites = (int) Math.min(3L, (into + EAT_BITE_MS - 140L) / EAT_BITE_MS);
+                boolean pushing = into % EAT_BITE_MS < 140L;
+                accessories.drawBittenApple(canvas, pushing ? ax - 1 : ax, ay, bites);
+                if (bites > mealFxStep) {
+                    mealFxStep = bites;
+                    // Farelinhos caindo e um "nhac" na vibração.
+                    spawnParticle(PARTICLE_CRUMB, cx + 3, mouthY + 1, now);
+                    spawnParticle(PARTICLE_CRUMB, cx + 1, mouthY + 2, now);
+                    triggerBounce(-0.35f, 0.12f);
+                    hapticTick(12);
+                }
+            } else if (mealFxStep < 4) {
+                mealFxStep = 4;
+                targetLookX = 0f;
+                targetLookY = 0f;
+                spawnParticle(PARTICLE_HEART, cx + 9, mouthY - 14, now);
+                triggerBounce(-0.8f, -0.2f);
+                hapticPattern(new long[]{0, 25, 60, 25});
+            }
+        } else if (mood == MOOD_DRINKING) {
+            int baseX = cx + 5;
+            int cupX = baseX;
+            int cupY = mouthY - 2;
+            int level;
+            boolean straw = true;
+            if (t < DRINK_ARRIVE_MS) {
+                cupX += Math.round(14 * (1f - easeOut(t / (float) DRINK_ARRIVE_MS)));
+                level = 4;
+            } else if (t < DRINK_SIP_END_MS) {
+                level = 4 - (int) ((t - DRINK_ARRIVE_MS) * 4L / (DRINK_SIP_END_MS - DRINK_ARRIVE_MS));
+                int gulp = (int) ((t - DRINK_ARRIVE_MS) / 425L);
+                if (gulp >= mealFxStep && gulp < 4) {
+                    mealFxStep = gulp + 1;
+                    triggerBounce(-0.25f, -0.08f);
+                    hapticTick(8);
+                }
+            } else {
+                // Copo vazio indo embora.
+                cupX += Math.round(16 * easeOut((t - DRINK_SIP_END_MS) / 450f));
+                level = 0;
+                straw = false;
+                if (mealFxStep < 5) {
+                    mealFxStep = 5;
+                    targetLookX = 0f;
+                    targetLookY = 0f;
+                    spawnParticle(PARTICLE_SPARKLE, cx - 12, mouthY - 16, now);
+                    triggerBounce(-0.8f, -0.2f);
+                    hapticPattern(new long[]{0, 25, 60, 25});
+                }
+            }
+            level = Math.max(0, level);
+            accessories.drawWaterCup(canvas, cupX, cupY, level);
+            // Bolhinhas subindo na água.
+            if (level > 0 && t >= DRINK_ARRIVE_MS) {
+                int rise = (int) ((t / 140L) % level);
+                grid.px(canvas, cupX + 2 + (int) ((t / 280L) % 2L), cupY + 4 - rise, grid.whitePaint);
+            }
+            if (straw) {
+                // Canudinho listrado saindo da boca, passando pela borda e entrando na água.
+                int off = cupX - baseX;
+                int[][] path = {
+                        {cx + 3, mouthY + 1}, {cx + 4, mouthY}, {cx + 4, mouthY - 1}, {cx + 5, mouthY - 2},
+                        {cx + 6, mouthY - 1}, {cx + 6, mouthY}, {cx + 6, mouthY + 1}, {cx + 6, mouthY + 2},
+                };
+                for (int i = 0; i < path.length; i++) {
+                    grid.px(canvas, path[i][0] + off, path[i][1],
+                            (i & 1) == 0 ? grid.pinkPaint : grid.whitePaint);
+                }
+                // Golinho subindo pelo canudo até a boca.
+                if (level > 0 && t >= DRINK_ARRIVE_MS) {
+                    int idx = path.length - 1 - (int) ((t / 60L) % path.length);
+                    grid.px(canvas, path[idx][0], path[idx][1], grid.cyanPaint);
+                }
+            }
+        }
+    }
+
+    /** Envelope, coração pedindo carinho e estrelinhas de tontura (desenhados junto do rosto). */
+    private void drawMoodExtras(Canvas canvas, int mood, int cx, int eyeY, int mouthY, long now) {
+        switch (mood) {
+            case MOOD_MAIL: {
+                int bob = (now / 300L) % 2L == 0L ? 0 : 1;
+                accessories.drawEnvelope(canvas, cx - 3, mouthY + 4 + bob);
+                break;
+            }
+            case MOOD_NEEDY:
+                // Balãozinho com coração pulsando.
+                grid.px(canvas, cx + 8, eyeY - 5, grid.dimPaint);
+                grid.px(canvas, cx + 9, eyeY - 7, grid.dimPaint);
+                if ((now / IDLE_FRAME_MS) % 2L == 0L) {
+                    grid.drawSprite5x5(canvas, cx + 9, eyeY - 13, SPRITE_HEART, grid.pinkPaint);
+                }
+                break;
+            case MOOD_DIZZY: {
+                // Duas estrelinhas girando em volta da cabeça.
+                double a = (now % 900L) / 900.0 * Math.PI * 2;
+                for (int k = 0; k < 2; k++) {
+                    double ang = a + k * Math.PI;
+                    int sx = (int) Math.round(cx + 0.5 + 9 * Math.cos(ang));
+                    int sy = (int) Math.round(eyeY - 8 + 2 * Math.sin(ang));
+                    grid.px(canvas, sx, sy, grid.goldPaint);
+                    grid.px(canvas, sx, sy - 1, grid.goldPaint);
+                    grid.px(canvas, sx - 1, sy, grid.goldPaint);
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    /**
+     * Modo tela desligada: relógio e rostinho dormindo em cinza (poucos pixels acesos),
+     * respirando a cada minuto e mudando 1 pixel de lugar para não marcar a tela.
+     */
+    private void drawAmbient(Canvas canvas, int width, int height) {
+        long minute = PetClock.wallMillis() / 60_000L;
+        int shiftX = (int) (minute % 3L) - 1;
+        int shiftY = (int) ((minute / 3L) % 3L) - 1;
+        canvas.save();
+        canvas.translate(shiftX * width / (float) GRID_SIZE, shiftY * height / (float) GRID_SIZE);
+        accessories.drawClockHHMM(canvas, HUD_CLOCK_Y, 0L, grid.ambientPaint);
+        int eyeY = FACE_TOP + 7;
+        Paint saved = facePaint;
+        facePaint = grid.ambientPaint;
+        drawSleepingEye(canvas, 20, eyeY);
+        drawSleepingEye(canvas, 31, eyeY);
+        // Respira devagar: a boquinha abre e fecha a cada minuto.
+        int half = minute % 2L == 0L ? 1 : 2;
+        grid.hline(canvas, 26 - half, 25 + half, eyeY + MOUTH_OFFSET + 1, grid.ambientPaint);
+        if (minute % 2L == 0L) {
+            grid.drawSprite5x5(canvas, 36, eyeY - 10, SPRITE_Z, grid.ambientDimPaint);
+        }
+        facePaint = saved;
+        canvas.restore();
+    }
+
+    /** Boca bem aberta 4x4 com linguinha. */
+    private void drawBigOpenMouth(Canvas canvas, int cx, int y) {
+        grid.hline(canvas, cx, cx + 1, y, facePaint);
+        grid.px(canvas, cx - 1, y + 1, facePaint);
+        grid.px(canvas, cx + 2, y + 1, facePaint);
+        grid.px(canvas, cx - 1, y + 2, facePaint);
+        grid.px(canvas, cx + 2, y + 2, facePaint);
+        grid.hline(canvas, cx, cx + 1, y + 2, grid.pinkPaint);
+        grid.hline(canvas, cx, cx + 1, y + 3, facePaint);
+    }
+
     private void drawOMouth(Canvas canvas, int cx, int y) {
-        grid.hline(canvas, cx, cx + 1, y, grid.whitePaint);
-        grid.px(canvas, cx - 1, y + 1, grid.whitePaint);
-        grid.px(canvas, cx + 2, y + 1, grid.whitePaint);
-        grid.hline(canvas, cx, cx + 1, y + 2, grid.whitePaint);
+        grid.hline(canvas, cx, cx + 1, y, facePaint);
+        grid.px(canvas, cx - 1, y + 1, facePaint);
+        grid.px(canvas, cx + 2, y + 1, facePaint);
+        grid.hline(canvas, cx, cx + 1, y + 2, facePaint);
     }
 
     // ================================================================= Desenho: Loja e HUD
@@ -1047,34 +1642,58 @@ public final class PetEngine {
             grid.px(canvas, 28, 46, check);
         } else {
             int price = ITEM_PRICES[shopCategory][item];
-            grid.rectPx(canvas, 18, 46, 20, 50, grid.goldPaint);
-            grid.px(canvas, 19, 47, grid.whitePaint);
-            grid.drawNumber3x5(canvas, 23, 46, price, state.coins >= price ? grid.goldPaint : grid.redPaint);
+            // Moedinha + preço centralizados entre as abas de baixo.
+            int digits = price >= 100 ? 3 : price >= 10 ? 2 : 1;
+            int x0 = 26 - (4 + 4 * digits) / 2;
+            grid.rectPx(canvas, x0, 46, x0 + 2, 50, grid.goldPaint);
+            grid.px(canvas, x0 + 1, 47, grid.whitePaint);
+            grid.drawNumber3x5(canvas, x0 + 5, 46, price, state.coins >= price ? grid.goldPaint : grid.redPaint);
         }
 
-        // Setinhas < >.
-        grid.px(canvas, 3, 28, grid.whitePaint);
-        grid.px(canvas, 4, 27, grid.whitePaint);
-        grid.px(canvas, 4, 29, grid.whitePaint);
-        grid.px(canvas, 5, 26, grid.whitePaint);
-        grid.px(canvas, 5, 30, grid.whitePaint);
-        grid.px(canvas, 48, 28, grid.whitePaint);
-        grid.px(canvas, 47, 27, grid.whitePaint);
-        grid.px(canvas, 47, 29, grid.whitePaint);
-        grid.px(canvas, 46, 26, grid.whitePaint);
-        grid.px(canvas, 46, 30, grid.whitePaint);
+        // Setinhas < > nas laterais (um pouco acima das abas).
+        grid.px(canvas, 3, 25, grid.whitePaint);
+        grid.px(canvas, 4, 24, grid.whitePaint);
+        grid.px(canvas, 4, 26, grid.whitePaint);
+        grid.px(canvas, 5, 23, grid.whitePaint);
+        grid.px(canvas, 5, 27, grid.whitePaint);
+        grid.px(canvas, 48, 25, grid.whitePaint);
+        grid.px(canvas, 47, 24, grid.whitePaint);
+        grid.px(canvas, 47, 26, grid.whitePaint);
+        grid.px(canvas, 46, 23, grid.whitePaint);
+        grid.px(canvas, 46, 27, grid.whitePaint);
 
-        // Abas: cabeça | nariz | olhos.
-        drawShopTab(canvas, 14, SPRITE_TAB_HAT, CATEGORY_HEAD, grid.goldPaint);
-        drawShopTab(canvas, 23, SPRITE_TAB_NOSE, CATEGORY_NOSE, grid.clownRedPaint);
-        drawShopTab(canvas, 32, SPRITE_TAB_EYE, CATEGORY_EYES, grid.cyanPaint);
+        // Abas em arco acompanhando a borda: cabeça | nariz | olhos (esquerda), pescoço | cor | fundo (direita).
+        drawShopTab(canvas, SPRITE_TAB_HAT, CATEGORY_HEAD, grid.goldPaint);
+        drawShopTab(canvas, SPRITE_TAB_NOSE, CATEGORY_NOSE, grid.clownRedPaint);
+        drawShopTab(canvas, SPRITE_TAB_EYE, CATEGORY_EYES, grid.cyanPaint);
+        drawShopTab(canvas, SPRITE_TAB_NECK, CATEGORY_NECK, grid.redPaint);
+        drawShopTab(canvas, null, CATEGORY_COLOR, null);
+        drawShopTab(canvas, SPRITE_TAB_BG, CATEGORY_BG, grid.lavenderPaint);
     }
 
-    private void drawShopTab(Canvas canvas, int x, int[] sprite, int category, Paint activePaint) {
+    /** Ângulo de cada aba no arco de baixo (0 = embaixo; negativo = esquerda). */
+    private static final double[] SHOP_TAB_DEG = {-70, -50, -30, 30, 50, 70};
+    private static final double SHOP_TAB_RADIUS = 22.0;
+    /** Faixa do meio de baixo que é o botão de comprar/usar. */
+    private static final double SHOP_BUY_HALF_DEG = 18.0;
+
+    private void drawShopTab(Canvas canvas, int[] sprite, int category, Paint activePaint) {
         boolean active = shopCategory == category;
-        grid.drawSprite5x5(canvas, x, 38, sprite, active ? activePaint : grid.dimPaint);
+        double angle = Math.toRadians(SHOP_TAB_DEG[category]);
+        int x = (int) Math.round(GRID_SIZE / 2.0 + SHOP_TAB_RADIUS * Math.sin(angle) - 2.5);
+        int y = (int) Math.round(GRID_SIZE / 2.0 + SHOP_TAB_RADIUS * Math.cos(angle) - 2.5);
+        if (sprite == null) {
+            // Aba de cor: quadradinho de 4 cores.
+            grid.rectPx(canvas, x, y, x + 1, y + 1, active ? grid.whitePaint : grid.dimPaint);
+            grid.rectPx(canvas, x + 3, y, x + 4, y + 1, active ? grid.facePinkPaint : grid.dimPaint);
+            grid.rectPx(canvas, x, y + 3, x + 1, y + 4, active ? grid.faceCyanPaint : grid.dimPaint);
+            grid.rectPx(canvas, x + 3, y + 3, x + 4, y + 4, active ? grid.faceGoldPaint : grid.dimPaint);
+        } else {
+            grid.drawSprite5x5(canvas, x, y, sprite, active ? activePaint : grid.dimPaint);
+        }
         if (active) {
-            grid.hline(canvas, x, x + 4, 44, grid.whitePaint);
+            // Tracinho do lado de dentro do arco (virado para o bichinho).
+            grid.hline(canvas, x + 1, x + 3, y - 2, grid.whitePaint);
         }
     }
 
@@ -1095,12 +1714,54 @@ public final class PetEngine {
         accessories.drawMiniStatBar(canvas, 27, barsY, state.happiness, grid.pinkPaint);
         accessories.drawMiniStatBar(canvas, 34, barsY, state.energy, grid.goldPaint);
 
-        // Barra de ações: comer | água | carinho | dormir/acordar | loja.
-        accessories.drawApple(canvas, 10, 42);
-        accessories.drawWaterCup(canvas, 17, 41, 3);
-        grid.drawSprite5x5(canvas, 24, 42, SPRITE_HEART, grid.pinkPaint);
-        grid.drawSprite5x5(canvas, 31, 42, state.isSleeping ? SPRITE_BOLT : SPRITE_MOON,
-                state.isSleeping ? grid.goldPaint : grid.lavenderPaint);
-        grid.drawSprite5x5(canvas, 37, 42, SPRITE_SHOP_CROWN, grid.goldPaint);
+        // Ações em arco acompanhando a borda: comer | água | carinho | dormir/acordar | loja.
+        for (int i = 0; i < ACTION_ICON_COUNT; i++) {
+            double angle = Math.toRadians((i - 2) * ACTION_ICON_STEP_DEG);
+            int x = (int) Math.round(GRID_SIZE / 2.0 + ACTION_ICON_RADIUS * Math.sin(angle) - 2.5);
+            int y = (int) Math.round(GRID_SIZE / 2.0 + ACTION_ICON_RADIUS * Math.cos(angle) - 2.5);
+            switch (i) {
+                case 0:
+                    accessories.drawApple(canvas, x, y);
+                    break;
+                case 1:
+                    accessories.drawWaterCup(canvas, x, y - 1, 3);
+                    break;
+                case 2:
+                    grid.drawSprite5x5(canvas, x, y, SPRITE_HEART, grid.pinkPaint);
+                    break;
+                case 3:
+                    grid.drawSprite5x5(canvas, x, y, state.isSleeping ? SPRITE_BOLT : SPRITE_MOON,
+                            state.isSleeping ? grid.goldPaint : grid.lavenderPaint);
+                    break;
+                default:
+                    grid.drawSprite5x5(canvas, x, y, SPRITE_SHOP_CROWN, grid.goldPaint);
+                    break;
+            }
+        }
+    }
+
+    // Ícones de ação num arco perto da borda (dentro do anel da bateria).
+    private static final int ACTION_ICON_COUNT = 5;
+    private static final double ACTION_ICON_STEP_DEG = 28.0;
+    private static final double ACTION_ICON_RADIUS = 19.5;
+
+    /**
+     * Qual ícone de ação foi tocado (0..4, da esquerda para a direita) ou -1.
+     * Vale a faixa perto da borda de baixo; escolhe o ícone de ângulo mais próximo.
+     */
+    private static int actionIconAt(float fx, float fy) {
+        double dx = (fx - 0.5f) * GRID_SIZE;
+        double dy = (fy - 0.5f) * GRID_SIZE;
+        double r = Math.hypot(dx, dy);
+        if (dy <= 0 || r < ACTION_ICON_RADIUS - 5.5) {
+            return -1;
+        }
+        double deg = Math.toDegrees(Math.atan2(dx, dy)); // 0 = embaixo, + = direita
+        double maxDeg = 2 * ACTION_ICON_STEP_DEG + ACTION_ICON_STEP_DEG * 0.6;
+        if (Math.abs(deg) > maxDeg) {
+            return -1;
+        }
+        int index = (int) Math.round(deg / ACTION_ICON_STEP_DEG) + 2;
+        return Math.max(0, Math.min(ACTION_ICON_COUNT - 1, index));
     }
 }

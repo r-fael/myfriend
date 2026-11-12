@@ -14,7 +14,7 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 
 /**
- * A cada 30 minutos confere o bichinho mesmo com o app fechado: se ele estiver com fome,
+ * A cada 30 minutos (só de dia) confere o bichinho mesmo com o app fechado: se ele estiver com fome,
  * sede ou a bateria do relógio estiver baixa, vibra e abre o app.
  *
  * <p>Respeita o modo dormindo ({@code isSleeping}) e aplica intervalo mínimo entre alertas
@@ -46,7 +46,28 @@ public class ReminderReceiver extends BroadcastReceiver {
         PendingIntent pending = PendingIntent.getBroadcast(context, REQUEST_CODE, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         alarmManager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                SystemClock.elapsedRealtime() + CHECK_INTERVAL_MS, pending);
+                SystemClock.elapsedRealtime() + nextCheckDelayMs(), pending);
+    }
+
+    private static boolean isNightHour(int hour) {
+        return hour >= NIGHT_START_HOUR || hour < MORNING_HOUR;
+    }
+
+    /** De dia, a cada 30 min; de noite o relógio não acorda: a próxima conferida é às 7h. */
+    private static long nextCheckDelayMs() {
+        java.util.Calendar next = java.util.Calendar.getInstance();
+        next.add(java.util.Calendar.MILLISECOND, (int) CHECK_INTERVAL_MS);
+        if (!isNightHour(next.get(java.util.Calendar.HOUR_OF_DAY))) {
+            return CHECK_INTERVAL_MS;
+        }
+        if (next.get(java.util.Calendar.HOUR_OF_DAY) >= NIGHT_START_HOUR) {
+            next.add(java.util.Calendar.DAY_OF_MONTH, 1);
+        }
+        next.set(java.util.Calendar.HOUR_OF_DAY, MORNING_HOUR);
+        next.set(java.util.Calendar.MINUTE, 0);
+        next.set(java.util.Calendar.SECOND, 0);
+        long delay = next.getTimeInMillis() - System.currentTimeMillis();
+        return Math.max(CHECK_INTERVAL_MS, delay);
     }
 
     @Override
@@ -59,7 +80,8 @@ public class ReminderReceiver extends BroadcastReceiver {
                 (nowWall - prefs.getLong("savedTime", nowWall)) / 3_600_000f);
         float hunger = Math.max(0f, prefs.getFloat("hunger", 85f) - HUNGER_DECAY_PER_HOUR * hoursAway);
         float water = Math.max(0f, prefs.getFloat("water", 80f) - WATER_DECAY_PER_HOUR * hoursAway);
-        boolean isSleeping = prefs.getBoolean("isSleeping", false);
+        boolean isSleeping = prefs.getBoolean("isSleeping", false)
+                || isNightHour(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY));
 
         BatteryManager batteryManager = (BatteryManager) context.getSystemService(Context.BATTERY_SERVICE);
         int battery = batteryManager != null

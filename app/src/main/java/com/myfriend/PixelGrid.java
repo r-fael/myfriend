@@ -25,6 +25,14 @@ public final class PixelGrid {
     public static final int[] SPRITE_TAB_HAT = {14, 14, 14, 31, 0};
     public static final int[] SPRITE_TAB_NOSE = {14, 31, 31, 31, 14};
     public static final int[] SPRITE_TAB_EYE = {0, 14, 27, 14, 0};
+    public static final int[] SPRITE_TAB_NECK = {17, 27, 31, 27, 17};
+    public static final int[] SPRITE_TAB_BG = {4, 14, 31, 14, 10};
+    /** Tênis (passos do dia). */
+    /** Marca de bravo (estilo mangá). */
+    public static final int[] SPRITE_ANGER = {10, 27, 0, 27, 10};
+    /** Olho de espiral (tonto), dois quadros. */
+    public static final int[] SPRITE_SPIRAL_A = {31, 1, 13, 9, 15};
+    public static final int[] SPRITE_SPIRAL_B = {31, 16, 22, 18, 30};
 
     private static final int[][] DIGITS_3X5 = {
             {7, 5, 5, 5, 7}, {2, 6, 2, 2, 7}, {7, 1, 7, 4, 7}, {7, 1, 7, 1, 7}, {5, 5, 7, 1, 1},
@@ -36,6 +44,19 @@ public final class PixelGrid {
     public final Paint whitePaint = makePaint(0xFFFFFFFF);
     public final Paint dimPaint = makePaint(0xFF444444);
     public final Paint ringTrackPaint = makePaint(0xFF1C1C1C);
+    // Cores do rostinho.
+    public final Paint facePinkPaint = makePaint(0xFFFF9ACD);
+    public final Paint faceCyanPaint = makePaint(0xFF7DF3FF);
+    public final Paint faceGoldPaint = makePaint(0xFFFFD95A);
+    // Fundos (bem apagadinhos para quase não gastar bateria no OLED).
+    public final Paint starDimPaint = makePaint(0xFF4A4426);
+    public final Paint starBrightPaint = makePaint(0xFFB8A64A);
+    public final Paint rainPaint = makePaint(0xFF1F4F66);
+    public final Paint snowPaint = makePaint(0xFF6E7C84);
+    // De costas e modo tela desligada.
+    public final Paint backHeadPaint = makePaint(0xFF2A2A2A);
+    public final Paint ambientPaint = makePaint(0xFF8A8A8A);
+    public final Paint ambientDimPaint = makePaint(0xFF505050);
     // Bonés de encanador e disfarce.
     public final Paint capRedPaint = makePaint(0xFFE53935);
     public final Paint capRedDarkPaint = makePaint(0xFFB71C1C);

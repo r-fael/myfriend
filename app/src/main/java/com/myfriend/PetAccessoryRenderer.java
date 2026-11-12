@@ -88,7 +88,7 @@ public final class PetAccessoryRenderer {
 
     /** Data DD/MM no mesmo lugar do relógio. */
     public void drawDateDDMM(Canvas canvas, int y, Paint paint) {
-        java.util.Calendar cal = java.util.Calendar.getInstance();
+        java.util.Calendar cal = PetClock.calendar();
         int day = cal.get(java.util.Calendar.DAY_OF_MONTH);
         int month = cal.get(java.util.Calendar.MONTH) + 1;
         g.drawDigit3x5(canvas, 16, y, day / 10, paint);
@@ -105,7 +105,7 @@ public final class PetAccessoryRenderer {
     // ---------------------------------------------------------------- Objetos e HUD
 
     public void drawClockHHMM(Canvas canvas, int y, long now, Paint paint) {
-        long wall = System.currentTimeMillis();
+        long wall = PetClock.wallMillis();
         int minuteOfDay = (int) (((wall + localTz.getOffset(wall)) / 60_000L) % 1440L);
         if (minuteOfDay < 0) {
             minuteOfDay += 1440;
@@ -116,8 +116,9 @@ public final class PetAccessoryRenderer {
         g.drawDigit3x5(canvas, 17, y, hours / 10, paint);
         g.drawDigit3x5(canvas, 21, y, hours % 10, paint);
         if ((now / 500L) % 2L == 0L) {
-            g.px(canvas, 25, y + 1, g.cyanPaint);
-            g.px(canvas, 25, y + 3, g.cyanPaint);
+            Paint colon = paint == g.whitePaint ? g.cyanPaint : paint; // cinza na tela desligada
+            g.px(canvas, 25, y + 1, colon);
+            g.px(canvas, 25, y + 3, colon);
         }
         g.drawDigit3x5(canvas, 27, y, minutes / 10, paint);
         g.drawDigit3x5(canvas, 31, y, minutes % 10, paint);
@@ -143,6 +144,182 @@ public final class PetAccessoryRenderer {
         g.hline(canvas, x, x + 4, y + 3, g.redPaint);
         g.hline(canvas, x + 1, x + 3, y + 4, g.redPaint);
         g.px(canvas, x + 1, y + 2, g.whitePaint);
+    }
+
+    /**
+     * Maçã mordida aos poucos pelo lado esquerdo (onde fica a boca).
+     *
+     * @param bites 0 = inteira, 1 e 2 = mordidas, 3 = só o miolo
+     */
+    public void drawBittenApple(Canvas canvas, int x, int y, int bites) {
+        if (bites <= 0) {
+            drawApple(canvas, x, y);
+            return;
+        }
+        if (bites >= 3) {
+            // Miolo: cabinho, pontinhas vermelhas e o meio clarinho com semente.
+            g.px(canvas, x + 2, y, g.greenPaint);
+            g.hline(canvas, x + 2, x + 3, y + 1, g.redPaint);
+            g.px(canvas, x + 2, y + 2, g.goldPaint);
+            g.px(canvas, x + 3, y + 2, g.brownPaint);
+            g.px(canvas, x + 2, y + 3, g.goldPaint);
+            g.hline(canvas, x + 2, x + 3, y + 4, g.redPaint);
+            return;
+        }
+        drawApple(canvas, x, y);
+        // Mordida: buraco com a polpa clarinha aparecendo na borda.
+        int depth = bites == 1 ? 1 : 2;
+        for (int row = y + 1; row <= y + 4; row++) {
+            boolean edgeRow = row == y + 1 || row == y + 4;
+            int inner = edgeRow ? depth - 1 : depth;
+            for (int dx = 0; dx <= inner; dx++) {
+                g.px(canvas, x + dx, row, g.blackPaint);
+            }
+            if (!edgeRow) {
+                g.px(canvas, x + inner + 1, row, g.goldPaint);
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- Pescoço, fundo e extras
+
+    /**
+     * Itens de boca/pescoço.
+     *
+     * @param mouthY linha de cima da boca
+     */
+    public void drawNeckItem(Canvas canvas, int cx, int mouthY, int item) {
+        int ny = mouthY + 5; // logo abaixo da boca
+        switch (item) {
+            case NECK_BOWTIE:
+                // Gravatinha borboleta vermelha com bolinhas.
+                mirrorHline(canvas, cx, -4, -3, ny - 1, g.redPaint);
+                mirrorHline(canvas, cx, -4, -1, ny, g.redPaint);
+                mirrorHline(canvas, cx, -4, -1, ny + 1, g.redPaint);
+                mirrorHline(canvas, cx, -4, -3, ny + 2, g.redPaint);
+                g.rectPx(canvas, cx, ny, cx + 1, ny + 1, g.clownRedPaint); // nó
+                mirrorPx(canvas, cx, -3, ny, g.whitePaint);
+                mirrorPx(canvas, cx, -2, ny + 1, g.whitePaint);
+                break;
+
+            case NECK_SCARF:
+                // Cachecol listrado com a ponta caindo para a direita.
+                for (int x = cx - 6; x <= cx + 7; x++) {
+                    Paint stripe = ((x - cx) & 2) == 0 ? g.redPaint : g.whitePaint;
+                    g.px(canvas, x, ny - 1, stripe);
+                    g.px(canvas, x, ny, stripe);
+                }
+                for (int y = ny + 1; y <= ny + 3; y++) {
+                    Paint stripe = ((y - ny) & 1) == 0 ? g.redPaint : g.whitePaint;
+                    g.hline(canvas, cx + 3, cx + 4, y, stripe);
+                }
+                g.px(canvas, cx + 3, ny + 4, g.redPaint); // franjinha
+                g.px(canvas, cx + 5, ny + 4, g.redPaint);
+                break;
+
+            case NECK_PACIFIER:
+                // Chupeta tampando a boca: escudo rosa e argolinha.
+                g.hline(canvas, cx - 1, cx + 2, mouthY, g.pinkPaint);
+                g.hline(canvas, cx - 2, cx + 3, mouthY + 1, g.pinkPaint);
+                g.hline(canvas, cx - 1, cx + 2, mouthY + 2, g.pinkPaint);
+                g.hline(canvas, cx, cx + 1, mouthY + 1, g.cyanPaint);
+                g.px(canvas, cx - 1, mouthY + 3, g.cyanPaint);
+                g.px(canvas, cx + 2, mouthY + 3, g.cyanPaint);
+                g.px(canvas, cx - 1, mouthY + 4, g.cyanPaint);
+                g.px(canvas, cx + 2, mouthY + 4, g.cyanPaint);
+                g.hline(canvas, cx, cx + 1, mouthY + 5, g.cyanPaint);
+                break;
+
+            case NECK_NECKLACE:
+                // Colar de bolinhas douradas com pingente azul.
+                mirrorPx(canvas, cx, -6, ny - 2, g.goldPaint);
+                mirrorPx(canvas, cx, -5, ny - 1, g.goldPaint);
+                mirrorPx(canvas, cx, -3, ny, g.goldPaint);
+                mirrorPx(canvas, cx, -1, ny + 1, g.goldPaint);
+                g.hline(canvas, cx, cx + 1, ny + 1, g.goldPaint);
+                g.hline(canvas, cx, cx + 1, ny + 2, g.cyanPaint);
+                g.hline(canvas, cx, cx + 1, ny + 3, g.deepBluePaint);
+                g.px(canvas, cx, ny + 2, g.whitePaint);
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    /** Estrelinhas fixas que piscam devagar (posições em volta do rosto). */
+    private static final int[][] STAR_SPOTS = {
+            {9, 10}, {16, 5}, {38, 7}, {44, 14}, {6, 19}, {47, 24}, {5, 33}, {45, 35},
+            {12, 42}, {40, 44}, {24, 3}, {31, 48}, {19, 47}, {35, 3},
+    };
+
+    /**
+     * Fundo sutil. Ele só anda quando a tela já está sendo redesenhada (não pede quadros a mais),
+     * então não muda o gasto de bateria.
+     */
+    public void drawBackground(Canvas canvas, int bg, long now) {
+        switch (bg) {
+            case BG_STARS:
+                for (int i = 0; i < STAR_SPOTS.length; i++) {
+                    boolean bright = ((now / 1000L) + i * 3L) % 7L == 0L;
+                    g.px(canvas, STAR_SPOTS[i][0], STAR_SPOTS[i][1], bright ? g.starBrightPaint : g.starDimPaint);
+                }
+                break;
+            case BG_RAIN:
+                for (int i = 0; i < 12; i++) {
+                    int x = 4 + (i * 17) % 44;
+                    int y = (int) ((i * 23L + now / 120L) % 56L) - 3;
+                    g.px(canvas, x, y, g.rainPaint);
+                    g.px(canvas, x, y + 1, g.rainPaint);
+                }
+                break;
+            case BG_SNOW:
+                for (int i = 0; i < 12; i++) {
+                    int y = (int) ((i * 19L + now / 600L) % 56L) - 3;
+                    int wiggle = (int) (((now / 1200L) + i) % 2L);
+                    g.px(canvas, 4 + (i * 13) % 44 + wiggle, y, g.snowPaint);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    /** Envelopinho de mensagem (8x5) com coraçãozinho de lacre. */
+    public void drawEnvelope(Canvas canvas, int x, int y) {
+        g.hline(canvas, x, x + 7, y, g.whitePaint);
+        g.hline(canvas, x, x + 7, y + 4, g.whitePaint);
+        for (int row = y + 1; row <= y + 3; row++) {
+            g.px(canvas, x, row, g.whitePaint);
+            g.px(canvas, x + 7, row, g.whitePaint);
+        }
+        g.px(canvas, x + 1, y + 1, g.whitePaint);
+        g.px(canvas, x + 2, y + 2, g.whitePaint);
+        g.px(canvas, x + 6, y + 1, g.whitePaint);
+        g.px(canvas, x + 5, y + 2, g.whitePaint);
+        g.hline(canvas, x + 3, x + 4, y + 3, g.redPaint); // lacre
+    }
+
+    /** Ele de costas, emburrado: nuca, redemoinho no cabelo e a marquinha de bravo piscando. */
+    public void drawSulkBack(Canvas canvas, int cx, int eyeY, long now) {
+        int[] halfWidths = {4, 6, 7, 8, 8, 8, 8, 8, 7, 6, 4};
+        for (int i = 0; i < halfWidths.length; i++) {
+            band(canvas, cx, halfWidths[i], eyeY - 5 + i, g.backHeadPaint);
+        }
+        // Redemoinho.
+        g.hline(canvas, cx, cx + 1, eyeY - 3, g.dimPaint);
+        g.px(canvas, cx + 2, eyeY - 2, g.dimPaint);
+        g.px(canvas, cx + 1, eyeY - 1, g.dimPaint);
+        // Bochechas aparecendo dos lados.
+        mirrorPx(canvas, cx, -8, eyeY + 2, g.blushPaint);
+        if ((now / 700L) % 2L == 0L) {
+            g.drawSprite5x5(canvas, cx + 8, eyeY - 10, SPRITE_ANGER, g.redPaint);
+        }
+        // "Hmpf": fumacinha saindo de lado.
+        if ((now / 1400L) % 3L == 0L) {
+            g.px(canvas, cx - 10, eyeY + 1, g.dimPaint);
+            g.px(canvas, cx - 12, eyeY, g.dimPaint);
+        }
     }
 
     public void drawPoop(Canvas canvas, int x, int y, long now) {
@@ -216,22 +393,13 @@ public final class PetAccessoryRenderer {
      */
     public void drawMoodProps(Canvas canvas, int mood, int cx, int top,
                               boolean shopOpen, long actionStartTime, long now) {
-        int fastBob = (now / 180L) % 2L == 0L ? 0 : -1;
         int slowBob = (now / 350L) % 2L == 0L ? 0 : -1;
         switch (mood) {
-            case MOOD_DRINKING: {
-                int level = 4 - Math.min(3, (int) (Math.max(0L, now - actionStartTime) / 550L));
-                drawWaterCup(canvas, cx + 13, top + 7 + fastBob, level);
-                break;
-            }
             case MOOD_THIRSTY:
                 if (!shopOpen) {
                     drawWaterCup(canvas, 41, 21 + slowBob, 3);
                     g.drawSprite5x5(canvas, 41, 14 + slowBob, SPRITE_WATER_DROP, g.cyanPaint);
                 }
-                break;
-            case MOOD_EATING:
-                drawApple(canvas, cx + 13, top + 8 + fastBob);
                 break;
             case MOOD_HUNGRY:
                 if (!shopOpen) {

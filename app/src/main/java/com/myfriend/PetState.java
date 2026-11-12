@@ -18,13 +18,35 @@ public final class PetState {
     public int mealsSincePoop = 0;
     public int poopCount = 0;
     public int coins = INITIAL_COINS;
-    /** Item equipado em cada categoria (cabeça, nariz, olhos). */
-    public final int[] equipped = {HEAD_SANTA_HAT, ITEM_NONE, ITEM_NONE};
+    /** Item equipado em cada categoria (cabeça, nariz, olhos, pescoço, cor, fundo). */
+    public final int[] equipped = new int[CATEGORY_COUNT];
     /** Por categoria: bit N ligado = item N comprado. "Nada" vem sempre liberado. */
-    public final int[] unlocked = {0b11, 0b1, 0b1};
+    public final int[] unlocked = new int[CATEGORY_COUNT];
 
-    private static final String[] KEY_EQUIPPED = {"equippedHead", "equippedNose", "equippedEyes"};
-    private static final String[] KEY_UNLOCKED = {"unlockedHead", "unlockedNose", "unlockedEyes"};
+    // Passos do dia (contador do sistema é acumulado desde que o relógio ligou).
+    public int stepDay = 0;
+    public float stepBase = 0f;
+    public float lastStepCounter = -1f;
+    public int stepsToday = 0;
+    public int goalDay = 0;
+
+    // Rotina.
+    public int stretchDay = 0;
+    public long lastSeenWall = 0L;
+    /** Dormiu sozinho à noite (acorda se espreguiçando de manhã). */
+    public boolean nightSleep = false;
+
+    private static final String[] KEY_EQUIPPED = {"equippedHead", "equippedNose", "equippedEyes",
+            "equippedNeck", "equippedColor", "equippedBg"};
+    private static final String[] KEY_UNLOCKED = {"unlockedHead", "unlockedNose", "unlockedEyes",
+            "unlockedNeck", "unlockedColor", "unlockedBg"};
+
+    {
+        equipped[CATEGORY_HEAD] = HEAD_SANTA_HAT;
+        for (int c = 0; c < CATEGORY_COUNT; c++) {
+            unlocked[c] = c == CATEGORY_HEAD ? 0b11 : 0b1;
+        }
+    }
 
     /**
      * Como os itens da loja antiga (uma lista só, v1.6) viram itens por categoria.
@@ -66,6 +88,14 @@ public final class PetState {
         poopCount = prefs.getInt("poopCount", 0);
         mealsSincePoop = prefs.getInt("mealsSincePoop", 0);
         coins = Math.max(0, prefs.getInt("coins", INITIAL_COINS));
+        stepDay = prefs.getInt("stepDay", 0);
+        stepBase = prefs.getFloat("stepBase", 0f);
+        lastStepCounter = prefs.getFloat("lastStepCounter", -1f);
+        stepsToday = prefs.getInt("stepsToday", 0);
+        goalDay = prefs.getInt("goalDay", 0);
+        stretchDay = prefs.getInt("stretchDay", 0);
+        lastSeenWall = prefs.getLong("lastSeenWall", 0L);
+        nightSleep = prefs.getBoolean("nightSleep", false);
         if (!prefs.contains(KEY_EQUIPPED[CATEGORY_HEAD]) && prefs.contains("unlockedMask")) {
             migrateLegacyItems();
         } else {
@@ -97,23 +127,16 @@ public final class PetState {
 
         // Usa fração exata de horas em vez de truncar minutos inteiros, evitando perda
         // de decaimento quando o relógio acorda em intervalos curtos (< 60s).
-        float hours = elapsedMs / 3_600_000f;
-        hunger = clamp(hunger - HUNGER_DECAY_PER_HOUR * hours);
-        water = clamp(water - WATER_DECAY_PER_HOUR * hours);
-        happiness = clamp(happiness - HAPPINESS_DECAY_PER_HOUR * hours);
-        if (isSleeping) {
-            energy = clamp(energy + ENERGY_SLEEP_GAIN_PER_HOUR * hours);
-            if (energy >= 100f) {
-                isSleeping = false;
-            }
-        } else {
-            energy = clamp(energy - ENERGY_DECAY_PER_HOUR * hours);
-        }
+        passTime(elapsedMs / 3_600_000f);
     }
 
     public void save() {
-        prefs.edit()
-                .putFloat("hunger", hunger)
+        SharedPreferences.Editor editor = prefs.edit();
+        for (int c = 0; c < CATEGORY_COUNT; c++) {
+            editor.putInt(KEY_EQUIPPED[c], equipped[c]);
+            editor.putInt(KEY_UNLOCKED[c], unlocked[c]);
+        }
+        editor.putFloat("hunger", hunger)
                 .putFloat("water", water)
                 .putFloat("happiness", happiness)
                 .putFloat("energy", energy)
@@ -121,12 +144,14 @@ public final class PetState {
                 .putInt("poopCount", poopCount)
                 .putInt("mealsSincePoop", mealsSincePoop)
                 .putInt("coins", coins)
-                .putInt(KEY_EQUIPPED[CATEGORY_HEAD], equipped[CATEGORY_HEAD])
-                .putInt(KEY_EQUIPPED[CATEGORY_NOSE], equipped[CATEGORY_NOSE])
-                .putInt(KEY_EQUIPPED[CATEGORY_EYES], equipped[CATEGORY_EYES])
-                .putInt(KEY_UNLOCKED[CATEGORY_HEAD], unlocked[CATEGORY_HEAD])
-                .putInt(KEY_UNLOCKED[CATEGORY_NOSE], unlocked[CATEGORY_NOSE])
-                .putInt(KEY_UNLOCKED[CATEGORY_EYES], unlocked[CATEGORY_EYES])
+                .putInt("stepDay", stepDay)
+                .putFloat("stepBase", stepBase)
+                .putFloat("lastStepCounter", lastStepCounter)
+                .putInt("stepsToday", stepsToday)
+                .putInt("goalDay", goalDay)
+                .putInt("stretchDay", stretchDay)
+                .putLong("lastSeenWall", lastSeenWall)
+                .putBoolean("nightSleep", nightSleep)
                 .putInt("itemsVersion", 3)
                 .remove("equippedItem")
                 .remove("unlockedMask")
@@ -135,17 +160,38 @@ public final class PetState {
     }
 
     public void updateRealtimeDecay(float dtSeconds) {
-        hunger = clamp(hunger - 0.015f * dtSeconds);
-        water = clamp(water - 0.025f * dtSeconds);
-        if (isSleeping) {
-            energy = clamp(energy + 0.08f * dtSeconds);
-            if (energy >= 100f) {
-                isSleeping = false;
-            }
-        } else {
-            energy = clamp(energy - 0.012f * dtSeconds);
-            happiness = clamp(happiness - 0.014f * dtSeconds);
+        passTime(dtSeconds / 3600f);
+    }
+
+    /**
+     * Passa o tempo (tela acesa ou apagada, mesma conta). Dormindo, fome/água/felicidade
+     * caem bem devagar e a energia enche; se acordar no meio (energia cheia de dia),
+     * o resto do tempo conta como acordado.
+     */
+    private void passTime(float hours) {
+        if (hours <= 0f) {
+            return;
         }
+        if (isSleeping) {
+            float sleepHours = hours;
+            if (!nightSleep) {
+                // Soneca de dia: acorda quando a energia enche.
+                sleepHours = Math.min(hours, (100f - energy) / ENERGY_SLEEP_GAIN_PER_HOUR);
+            }
+            hunger = clamp(hunger - HUNGER_SLEEP_DECAY_PER_HOUR * sleepHours);
+            water = clamp(water - WATER_SLEEP_DECAY_PER_HOUR * sleepHours);
+            happiness = clamp(happiness - HAPPINESS_SLEEP_DECAY_PER_HOUR * sleepHours);
+            energy = clamp(energy + ENERGY_SLEEP_GAIN_PER_HOUR * sleepHours);
+            hours -= sleepHours;
+            if (hours <= 0f) {
+                return;
+            }
+            isSleeping = false; // acordou com a energia cheia
+        }
+        hunger = clamp(hunger - HUNGER_DECAY_PER_HOUR * hours);
+        water = clamp(water - WATER_DECAY_PER_HOUR * hours);
+        happiness = clamp(happiness - HAPPINESS_DECAY_PER_HOUR * hours);
+        energy = clamp(energy - ENERGY_DECAY_PER_HOUR * hours);
     }
 
     public boolean isUnlocked(int category, int item) {

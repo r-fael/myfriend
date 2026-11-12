@@ -8,28 +8,22 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
-import android.hardware.Sensor;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
-import android.hardware.SensorManager;
 import android.os.BatteryManager;
 import android.os.Bundle;
 import android.view.Window;
-import android.view.WindowManager;
 
-/** Tela principal: mostra o bichinho e alimenta ele com passos e status da bateria. */
-public class MainActivity extends Activity implements SensorEventListener {
+/**
+ * Tela principal: mostra o bichinho. Não segura a tela acesa (deixa o relógio apagar sozinho
+ * para economizar bateria); os sensores ficam no {@link PetSensors} e só rodam com a tela acesa.
+ */
+public class MainActivity extends Activity {
 
     /** Extra que pede para abrir o seletor de mostrador já com o My Friend escolhido. */
     public static final String EXTRA_SET_WATCH_FACE = "set_watchface";
 
-    private static final int REQUEST_ACTIVITY_RECOGNITION = 101;
-    private static final int MAX_STEPS_PER_EVENT = 20;
+    private static final int REQUEST_PERMISSIONS = 101;
 
-    private SensorManager sensorManager;
-    private Sensor stepSensor;
     private FriendView friendView;
-    private float lastStepCounterValue = -1f;
 
     private final BroadcastReceiver batteryReceiver = new BroadcastReceiver() {
         @Override
@@ -52,18 +46,14 @@ public class MainActivity extends Activity implements SensorEventListener {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
-        if (checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.ACTIVITY_RECOGNITION}, REQUEST_ACTIVITY_RECOGNITION);
-        }
-
-        sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
-        if (sensorManager != null) {
-            stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
-            if (stepSensor == null) {
-                stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
+        java.util.ArrayList<String> missing = new java.util.ArrayList<>();
+        for (String permission : new String[]{Manifest.permission.ACTIVITY_RECOGNITION}) {
+            if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
+                missing.add(permission);
             }
+        }
+        if (!missing.isEmpty()) {
+            requestPermissions(missing.toArray(new String[0]), REQUEST_PERMISSIONS);
         }
 
         friendView = new FriendView(this);
@@ -104,9 +94,6 @@ public class MainActivity extends Activity implements SensorEventListener {
             friendView.requestFocus();
         }
         registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
-        if (sensorManager != null && stepSensor != null) {
-            sensorManager.registerListener(this, stepSensor, SensorManager.SENSOR_DELAY_NORMAL);
-        }
     }
 
     @Override
@@ -116,9 +103,6 @@ public class MainActivity extends Activity implements SensorEventListener {
         } catch (Exception ignored) {
             // Já estava desregistrado.
         }
-        if (sensorManager != null) {
-            sensorManager.unregisterListener(this);
-        }
         if (friendView != null) {
             friendView.onPause();
         }
@@ -126,26 +110,11 @@ public class MainActivity extends Activity implements SensorEventListener {
     }
 
     @Override
-    public void onSensorChanged(SensorEvent event) {
-        if (friendView == null || event == null || event.values.length == 0) {
-            return;
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (friendView != null) {
+            // Religa os sensores agora que a permissão pode ter sido dada.
+            friendView.restartSensors();
         }
-        int type = event.sensor.getType();
-        if (type == Sensor.TYPE_STEP_DETECTOR) {
-            friendView.onUserStep(1);
-        } else if (type == Sensor.TYPE_STEP_COUNTER) {
-            float total = event.values[0];
-            if (lastStepCounterValue >= 0f && total > lastStepCounterValue) {
-                int steps = Math.min(MAX_STEPS_PER_EVENT, Math.round(total - lastStepCounterValue));
-                if (steps > 0) {
-                    friendView.onUserStep(steps);
-                }
-            }
-            lastStepCounterValue = total;
-        }
-    }
-
-    @Override
-    public void onAccuracyChanged(Sensor sensor, int accuracy) {
     }
 }

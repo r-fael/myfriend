@@ -12,12 +12,30 @@ public final class PetConfig {
 
     public static final String PREFS_NAME = "myfriend_prefs";
 
-    /** Quanto cada status cai por hora com o app fechado. */
-    public static final float HUNGER_DECAY_PER_HOUR = 9f;
-    public static final float WATER_DECAY_PER_HOUR = 22f;
-    public static final float HAPPINESS_DECAY_PER_HOUR = 6f;
-    public static final float ENERGY_DECAY_PER_HOUR = 7f;
-    public static final float ENERGY_SLEEP_GAIN_PER_HOUR = 25f;
+    /**
+     * Quanto cada status cai por hora (tela acesa ou apagada, é a mesma conta).
+     * Tudo zera em no máximo 3 horas, para precisar cuidar dele sempre:
+     * água ~2h15, fome ~2h45, felicidade e energia ~2h55.
+     */
+    public static final float HUNGER_DECAY_PER_HOUR = 36f;
+    public static final float WATER_DECAY_PER_HOUR = 45f;
+    public static final float HAPPINESS_DECAY_PER_HOUR = 34f;
+    public static final float ENERGY_DECAY_PER_HOUR = 34f;
+    /**
+     * Dormindo, tudo cai bem mais devagar: numa noite de 8 h a fome fica em ~50%,
+     * a água em ~45% e a felicidade não cai.
+     */
+    public static final float HUNGER_SLEEP_DECAY_PER_HOUR = 6f;
+    public static final float WATER_SLEEP_DECAY_PER_HOUR = 7f;
+    public static final float HAPPINESS_SLEEP_DECAY_PER_HOUR = 0f;
+    /** Dormindo, a energia enche em 2 horas. */
+    public static final float ENERGY_SLEEP_GAIN_PER_HOUR = 50f;
+
+    /** Apertar muito: fica bravo por um tempo e cada cutucada a mais aumenta a birra. */
+    public static final int GRUMPY_POKES = 5;
+    public static final long GRUMPY_MS = 6000L;
+    public static final long GRUMPY_EXTRA_PER_POKE_MS = 1500L;
+    public static final long GRUMPY_MAX_MS = 12_000L;
 
     public static final float THIRSTY_THRESHOLD = 35f;
     public static final float HUNGRY_THRESHOLD = 32f;
@@ -39,7 +57,10 @@ public final class PetConfig {
     public static final int CATEGORY_HEAD = 0;
     public static final int CATEGORY_NOSE = 1;
     public static final int CATEGORY_EYES = 2;
-    public static final int CATEGORY_COUNT = 3;
+    public static final int CATEGORY_NECK = 3;
+    public static final int CATEGORY_COLOR = 4;
+    public static final int CATEGORY_BG = 5;
+    public static final int CATEGORY_COUNT = 6;
 
     /** Item 0 de toda categoria é "nada equipado". */
     public static final int ITEM_NONE = 0;
@@ -81,6 +102,22 @@ public final class PetConfig {
     public static final int EYES_MONOCLE = 4;
     public static final int EYES_DISGUISE = 5;
 
+    // Boca/pescoço
+    public static final int NECK_BOWTIE = 1;
+    public static final int NECK_SCARF = 2;
+    public static final int NECK_PACIFIER = 3;
+    public static final int NECK_NECKLACE = 4;
+
+    // Cor do rostinho (0 = branco)
+    public static final int COLOR_PINK = 1;
+    public static final int COLOR_CYAN = 2;
+    public static final int COLOR_GOLD = 3;
+
+    // Fundo (0 = preto)
+    public static final int BG_STARS = 1;
+    public static final int BG_RAIN = 2;
+    public static final int BG_SNOW = 3;
+
     /** Preço de cada item, por categoria (índice = id do item). */
     public static final int[][] ITEM_PRICES = {
             { // cabeça
@@ -117,6 +154,25 @@ public final class PetConfig {
                     55, // monóculo
                     40, // óculos de disfarce com sobrancelhas
             },
+            { // boca/pescoço
+                    0,  // nada
+                    30, // gravatinha borboleta
+                    35, // cachecol
+                    25, // chupeta
+                    45, // colar com pingente
+            },
+            { // cor do rostinho
+                    0,  // branco
+                    40, // rosa
+                    40, // ciano
+                    60, // dourado
+            },
+            { // fundo
+                    0,  // preto
+                    30, // estrelinhas
+                    30, // chuva
+                    30, // neve
+            },
     };
 
     public static int itemCount(int category) {
@@ -140,6 +196,39 @@ public final class PetConfig {
     public static final int MOOD_DRINKING = 11;
     public static final int MOOD_SHOWERING = 12;
     public static final int MOOD_LOW_BATTERY = 13;
+    public static final int MOOD_YAWN = 14;
+    public static final int MOOD_STRETCH = 15;
+    public static final int MOOD_EXCITED = 16;
+    public static final int MOOD_DIZZY = 17;
+    public static final int MOOD_MAIL = 18;
+    public static final int MOOD_SULK = 19;
+    public static final int MOOD_CELEBRATE = 20;
+    public static final int MOOD_NEEDY = 21;
+
+    // ---------------------------------------------------------------- Rotina e humor do dia
+
+    /** Das 23h às 7h é noite: ao apagar a tela ele dorme sozinho. */
+    public static final int NIGHT_START_HOUR = 23;
+    public static final int MORNING_HOUR = 7;
+    /** Das 21h até a hora de dormir ele boceja de vez em quando. */
+    public static final int EVENING_YAWN_HOUR = 21;
+    /** Sem abrir o relógio por esse tempo (de dia), ele fica emburrado de costas. */
+    public static final long SULK_AFTER_MS = 3 * 60 * 60 * 1000L;
+    /** Personalidade sorteada a cada dia. */
+    public static final int PERSONALITY_NORMAL = 0;
+    public static final int PERSONALITY_LAZY = 1;
+    public static final int PERSONALITY_HYPER = 2;
+    public static final int PERSONALITY_NEEDY = 3;
+    /** Carente: pede carinho se ficar esse tempo sem receber. */
+    public static final long NEEDY_AFTER_MS = 15 * 60 * 1000L;
+
+    // ---------------------------------------------------------------- Passos
+
+    public static final int STEP_GOAL = 6000;
+    public static final int STEP_GOAL_REWARD = 100;
+    /** Passos dentro de {@link #EXCITED_WINDOW_MS} para ele ficar animado com a caminhada. */
+    public static final int EXCITED_STEPS = 25;
+    public static final long EXCITED_WINDOW_MS = 20_000L;
 
     // ---------------------------------------------------------------- Partículas
 
@@ -151,4 +240,6 @@ public final class PetConfig {
     public static final int PARTICLE_APPLE = 4;
     public static final int PARTICLE_DROP = 5;
     public static final int PARTICLE_SHOWER = 6;
+    /** Farelinho de maçã caindo (1 pixel). */
+    public static final int PARTICLE_CRUMB = 7;
 }

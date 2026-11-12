@@ -16,6 +16,7 @@ import android.view.ViewConfiguration;
 public class FriendView extends View {
 
     private final PetEngine engine;
+    private final PetSensors sensors;
     private final float scaledScrollFactor;
 
     public FriendView(Context context) {
@@ -24,24 +25,27 @@ public class FriendView extends View {
         setFocusableInTouchMode(true);
         scaledScrollFactor = ViewConfiguration.get(context).getScaledVerticalScrollFactor();
         engine = new PetEngine(context);
+        sensors = new PetSensors(context, engine, this::invalidate);
     }
 
     public void onResume() {
         engine.onResume();
+        sensors.start();
         invalidate();
     }
 
     public void onPause() {
+        sensors.stop();
         engine.onPause();
+    }
+
+    public void restartSensors() {
+        sensors.stop();
+        sensors.start();
     }
 
     public void updateBatteryStatus(int percent, boolean charging) {
         engine.updateBatteryStatus(percent, charging);
-        invalidate();
-    }
-
-    public void onUserStep(int steps) {
-        engine.onUserStep(steps);
         invalidate();
     }
 
