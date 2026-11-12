@@ -1,0 +1,49 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.myfriend'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.myfriend'
+        minSdk 30
+        targetSdk 34
+        versionCode 5
+        versionName '1.5.0'
+    }
+
+    buildTypes {
+        release {
+            // R8: remove código não usado, otimiza e encurta nomes.
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // Assina com a chave de debug para poder instalar direto no relógio.
+            signingConfig signingConfigs.debug
+            vcsInfo.include false
+        }
+    }
+
+    packaging {
+        // Comprime o classes.dex dentro do APK (o padrão do AGP é guardar sem compressão).
+        dex {
+            useLegacyPackaging true
+        }
+    }
+
+    dependenciesInfo {
+        includeInApk false
+        includeInBundle false
+    }
+
+    buildFeatures {
+        buildConfig false
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
