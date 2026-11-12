@@ -7,10 +7,13 @@ import android.service.wallpaper.WallpaperService;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 
-/** Mostrador do relógio: desenha o mesmo bichinho da tela principal, com relógio. */
+/**
+ * Mostrador do relógio (Watch Face): usa o {@link PetEngine} diretamente na Surface
+ * sem instanciar uma {@link android.view.View} órfã em memória.
+ */
 public class FriendWatchFaceService extends WallpaperService {
 
-    private static final long DEFAULT_FRAME_DELAY_MS = 450;
+    private static final long DEFAULT_FRAME_DELAY_MS = 500L;
 
     @Override
     public Engine onCreateEngine() {
@@ -20,7 +23,7 @@ public class FriendWatchFaceService extends WallpaperService {
     private class FriendEngine extends Engine {
         private final Handler handler = new Handler(Looper.getMainLooper());
         private final Runnable drawRunner = this::drawFrame;
-        private FriendView renderer;
+        private PetEngine engine;
         private boolean visible = false;
         private int surfaceWidth = 432;
         private int surfaceHeight = 432;
@@ -29,8 +32,8 @@ public class FriendWatchFaceService extends WallpaperService {
         public void onCreate(SurfaceHolder surfaceHolder) {
             super.onCreate(surfaceHolder);
             setTouchEventsEnabled(true);
-            renderer = new FriendView(FriendWatchFaceService.this);
-            renderer.setWatchFaceMode(true);
+            engine = new PetEngine(FriendWatchFaceService.this);
+            engine.setWatchFaceMode(true);
         }
 
         @Override
@@ -38,8 +41,8 @@ public class FriendWatchFaceService extends WallpaperService {
             super.onSurfaceChanged(holder, format, width, height);
             surfaceWidth = width;
             surfaceHeight = height;
-            if (renderer != null) {
-                renderer.updateGridMetrics(width, height);
+            if (engine != null) {
+                engine.updateGridMetrics(width, height);
             }
             drawFrame();
         }
@@ -49,23 +52,23 @@ public class FriendWatchFaceService extends WallpaperService {
             super.onVisibilityChanged(isVisible);
             visible = isVisible;
             handler.removeCallbacks(drawRunner);
-            if (renderer == null) {
+            if (engine == null) {
                 return;
             }
             if (isVisible) {
-                renderer.onResume();
-                renderer.updateGridMetrics(surfaceWidth, surfaceHeight);
+                engine.onResume();
+                engine.updateGridMetrics(surfaceWidth, surfaceHeight);
                 drawFrame();
             } else {
-                renderer.onPause();
+                engine.onPause();
             }
         }
 
         @Override
         public void onTouchEvent(MotionEvent event) {
             super.onTouchEvent(event);
-            if (renderer != null && visible) {
-                renderer.handleTouch(event, surfaceWidth, surfaceHeight);
+            if (engine != null && visible) {
+                engine.handleTouch(event, surfaceWidth, surfaceHeight);
                 drawFrame();
             }
         }
@@ -73,15 +76,15 @@ public class FriendWatchFaceService extends WallpaperService {
         @Override
         public void onDestroy() {
             handler.removeCallbacks(drawRunner);
-            if (renderer != null) {
-                renderer.onPause();
+            if (engine != null) {
+                engine.onPause();
             }
             super.onDestroy();
         }
 
         private void drawFrame() {
             handler.removeCallbacks(drawRunner);
-            if (!visible || renderer == null) {
+            if (!visible || engine == null) {
                 return;
             }
             SurfaceHolder holder = getSurfaceHolder();
@@ -90,7 +93,7 @@ public class FriendWatchFaceService extends WallpaperService {
             try {
                 canvas = holder.lockCanvas();
                 if (canvas != null) {
-                    nextDelay = renderer.renderScene(canvas, surfaceWidth, surfaceHeight, false);
+                    nextDelay = engine.renderScene(canvas, surfaceWidth, surfaceHeight, false);
                 }
             } catch (Exception ignored) {
                 // Superfície pode sumir no meio do desenho.
