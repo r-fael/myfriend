@@ -28,8 +28,8 @@ public final class PetConfig {
     public static final float HUNGER_SLEEP_DECAY_PER_HOUR = 6f;
     public static final float WATER_SLEEP_DECAY_PER_HOUR = 7f;
     public static final float HAPPINESS_SLEEP_DECAY_PER_HOUR = 0f;
-    /** Dormindo, a energia enche em 2 horas. */
-    public static final float ENERGY_SLEEP_GAIN_PER_HOUR = 50f;
+    /** Dormindo, a energia enche em 30 min (cada pixel da barrinha de 5 = ~6 min de soneca). */
+    public static final float ENERGY_SLEEP_GAIN_PER_HOUR = 200f;
 
     /** Apertar muito: fica bravo por um tempo e cada cutucada a mais aumenta a birra. */
     public static final int GRUMPY_POKES = 5;
