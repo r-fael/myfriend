@@ -29,9 +29,13 @@ public final class PetEngine {
     // ---------------------------------------------------------------- Estado da tela
 
     private boolean shopOpen = false;
-    private int shopPreviewItem = ITEM_SANTA_HAT;
+    private int shopCategory = CATEGORY_HEAD;
+    /** Item mostrado na loja em cada categoria (só a categoria aberta pode diferir do equipado). */
+    private final int[] shopPreview = new int[CATEGORY_COUNT];
     private boolean isWatchFaceMode = false;
-    private boolean showBatteryInsteadOfClock = false;
+    private boolean showDateInsteadOfClock = false;
+    /** Zoom do rosto: maior quando está sozinho (sem HUD), normal quando mexem nele. */
+    private float faceZoom = 1f;
 
     private int watchBatteryPct = 100;
     private boolean isWatchCharging = false;
@@ -113,7 +117,7 @@ public final class PetEngine {
         lastFrameTime = now;
         lastInteractionTime = now;
         lastBatteryPollTime = now;
-        showBatteryInsteadOfClock = false;
+        showDateInsteadOfClock = false;
     }
 
     public void onPause() {
@@ -345,22 +349,38 @@ public final class PetEngine {
         shopOpen = !shopOpen;
         if (shopOpen) {
             state.isSleeping = false;
-            shopPreviewItem = state.equippedItem;
+            shopCategory = CATEGORY_HEAD;
+            System.arraycopy(state.equipped, 0, shopPreview, 0, CATEGORY_COUNT);
             triggerBounce(-0.6f, 0.15f);
         }
         hapticTick(20);
     }
 
+    private void selectShopCategory(int category) {
+        // Ao trocar de aba, a aba anterior volta a mostrar o que está equipado.
+        shopPreview[shopCategory] = state.equipped[shopCategory];
+        shopCategory = category;
+        shopPreview[category] = state.equipped[category];
+        triggerBounce(-0.4f, 0.12f);
+        hapticTick(15);
+    }
+
     private void shopStep(int delta) {
-        shopPreviewItem = ((shopPreviewItem + delta) % TOTAL_ITEMS + TOTAL_ITEMS) % TOTAL_ITEMS;
+        int count = itemCount(shopCategory);
+        shopPreview[shopCategory] = ((shopPreview[shopCategory] + delta) % count + count) % count;
         triggerBounce(-0.4f, 0.12f);
     }
 
+    /** Item que aparece no bichinho: o da pré-visualização com a loja aberta, senão o equipado. */
+    private int shownItem(int category) {
+        return shopOpen ? shopPreview[category] : state.equipped[category];
+    }
+
     private void buyOrEquipPreviewItem(long now) {
-        int item = shopPreviewItem;
-        if (state.isUnlocked(item)) {
-            state.equippedItem = item;
-            shopOpen = false;
+        int category = shopCategory;
+        int item = shopPreview[category];
+        if (state.isUnlocked(category, item)) {
+            state.equipped[category] = item;
             startAction(MOOD_LOVED, now, 1400L);
             triggerBounce(-0.9f, -0.2f);
             spawnParticle(PARTICLE_SPARKLE, 14, 14, now);
@@ -369,12 +389,11 @@ public final class PetEngine {
             state.save();
             return;
         }
-        int price = ITEM_PRICES[item];
+        int price = ITEM_PRICES[category][item];
         if (state.coins >= price) {
             state.coins -= price;
-            state.unlockedMask |= 1 << item;
-            state.equippedItem = item;
-            shopOpen = false;
+            state.unlock(category, item);
+            state.equipped[category] = item;
             startAction(MOOD_LOVED, now, 1600L);
             triggerBounce(-1.1f, -0.25f);
             spawnParticle(PARTICLE_SPARKLE, 12, 14, now);
@@ -393,7 +412,7 @@ public final class PetEngine {
     public void handleRotaryScroll(float delta) {
         long now = SystemClock.uptimeMillis();
         if (now - lastInteractionTime >= HUD_VISIBLE_MS) {
-            showBatteryInsteadOfClock = false;
+            showDateInsteadOfClock = false;
         }
         lastInteractionTime = now;
 
@@ -427,7 +446,7 @@ public final class PetEngine {
         boolean wasIdle = now - lastInteractionTime >= HUD_VISIBLE_MS;
         lastInteractionTime = now;
         if (wasIdle) {
-            showBatteryInsteadOfClock = false;
+            showDateInsteadOfClock = false;
         }
 
         float x = event.getX();
@@ -459,25 +478,52 @@ public final class PetEngine {
         return true;
     }
 
+    /**
+     * Loja: barra de baixo = [fechar | cabeça | nariz | olhos]; laterais = item anterior/próximo;
+     * tocar no bichinho = comprar ou equipar o item mostrado (a loja continua aberta).
+     */
     private void handleShopTap(float fx, float fy, long now) {
-        boolean bottomRow = fy > 0.68f;
-        if (bottomRow && fx >= 0.28f && fx <= 0.72f) {
+        if (fy < 0.28f) {
+            // Topo: X de sair fica no canto de cima à direita; o resto do topo também fecha.
+            shopOpen = false;
+            hapticTick(15);
+            return;
+        }
+        if (fy > 0.86f) {
+            // Botão de baixo: comprar / usar.
             buyOrEquipPreviewItem(now);
             return;
         }
-        if (fx < 0.3f) {
+        if (fy > 0.72f) {
+            if (fx < 0.40f) {
+                selectShopCategory(CATEGORY_HEAD);
+            } else if (fx < 0.60f) {
+                selectShopCategory(CATEGORY_NOSE);
+            } else {
+                selectShopCategory(CATEGORY_EYES);
+            }
+            return;
+        }
+        if (fx < 0.25f) {
             shopStep(-1);
-        } else if (fx > 0.7f) {
+        } else if (fx > 0.75f) {
             shopStep(1);
         } else {
-            shopOpen = false;
+            buyOrEquipPreviewItem(now);
+            return;
         }
         hapticTick(15);
     }
 
     private void handlePetTap(float fx, float fy, boolean wasIdle, long now) {
-        if (!wasIdle && fy < 0.22f) {
-            showBatteryInsteadOfClock = !showBatteryInsteadOfClock;
+        if (wasIdle && (fy < 0.28f || fy > 0.73f)) {
+            // Primeiro toque nas bordas só mostra relógio/barras/botões (que estavam escondidos).
+            triggerBounce(-0.4f, 0.1f);
+            hapticTick(10);
+            return;
+        }
+        if (!wasIdle && fy < 0.28f) {
+            showDateInsteadOfClock = !showDateInsteadOfClock;
             hapticTick(12);
             return;
         }
@@ -559,8 +605,8 @@ public final class PetEngine {
 
         if (ambient) {
             accessories.drawClockHHMM(canvas, 6, 0L, grid.whitePaint);
-            drawEyes(canvas, 17, 34, 26, MOOD_SLEEPING, now);
-            drawMouth(canvas, 25, 35, MOOD_SLEEPING, now);
+            drawEyes(canvas, 20, 31, FACE_TOP + 7, MOOD_SLEEPING, now);
+            drawMouth(canvas, 25, FACE_TOP + 7 + MOUTH_OFFSET, MOOD_SLEEPING, now);
             return 60_000L;
         }
 
@@ -583,51 +629,48 @@ public final class PetEngine {
             spawnParticle(PARTICLE_Z, (int) (now % 4L) + 34, 17, now);
         }
 
-        // ---- Posição do rosto
+        // ---- Posição do rosto (só rosto, sem corpo)
         int breathe = (mood == MOOD_SLEEPING || (now / 900L) % 2L != 0L) ? 1 : 0;
-        int lookOffsetX = shopOpen ? 0 : Math.round(lookX);
-        int offsetY = Math.round(lookY + bounceY) + breathe;
-        int cx = lookOffsetX + 25;
+        int sway = shopOpen ? 0 : clampInt(Math.round(lookX * 0.4f), -1, 1);
+        int cx = 25 + sway;
         int squashX = Math.round(squash * 3f);
         int squashY = Math.round(squash * 2f);
-        int eyeY = offsetY + 26 + squashY;
-        int mouthY = offsetY + 35 + squashY;
+        int head = FACE_TOP + Math.round(bounceY) + breathe + squashY;
+        int eyeY = head + 7;
+        int lx = cx - 5 - squashX;
+        int rx = cx + 6 + squashX;
 
-        drawEyes(canvas, lookOffsetX + 17 - squashX, lookOffsetX + 34 + squashX, eyeY, mood, now);
-        drawMouth(canvas, cx, mouthY, mood, now);
+        // Sozinho por um tempo: o rostinho cresce para ocupar a tela.
+        boolean hudVisible = now - lastInteractionTime < HUD_VISIBLE_MS;
+        float zoomTarget = (!shopOpen && !hudVisible) ? IDLE_FACE_ZOOM : 1f;
+        faceZoom += (zoomTarget - faceZoom) * Math.min(1f, physDt * 7f);
+        if (Math.abs(zoomTarget - faceZoom) < 0.004f) {
+            faceZoom = zoomTarget;
+        }
+        canvas.save();
+        canvas.scale(faceZoom, faceZoom, width * 0.5f, height * (FACE_ZOOM_PIVOT_ROW / GRID_SIZE));
 
-        // ---- Acessório (na loja mostra o item em pré-visualização)
+        drawCheeks(canvas, cx, eyeY);
+        drawEyes(canvas, lx, rx, eyeY, mood, now);
+        drawMouth(canvas, cx, eyeY + MOUTH_OFFSET, mood, now);
+
+        // ---- Acessórios (na loja mostra a pré-visualização)
+        int headItem = shownItem(CATEGORY_HEAD);
         boolean walking = now - lastStepTime < WALKING_WINDOW_MS;
-        int item;
-        if (shopOpen) {
-            item = shopPreviewItem;
-        } else if (walking && state.equippedItem == ITEM_NONE) {
-            item = ITEM_HEADBAND; // faixa de academia enquanto caminha
-        } else {
-            item = state.equippedItem;
+        if (!shopOpen && walking && headItem == ITEM_NONE) {
+            headItem = HEAD_HEADBAND; // faixa de academia enquanto caminha
         }
-        if (item != ITEM_NONE) {
-            accessories.drawAccessory(canvas, cx, eyeY, mouthY, item);
-        }
+        accessories.drawNoseItem(canvas, cx, eyeY, shownItem(CATEGORY_NOSE));
+        accessories.drawEyesItem(canvas, lx, rx, eyeY, cx, shownItem(CATEGORY_EYES));
+        accessories.drawHeadItem(canvas, cx, eyeY, headItem);
+        canvas.restore();
 
         if (state.poopCount > 0 && !shopOpen) {
             accessories.drawPoop(canvas, 5, 34, now);
         }
 
-        // ---- Topo: alerta de bateria ou relógio (modo mostrador)
-        boolean hudVisible = now - lastInteractionTime < HUD_VISIBLE_MS;
-        if (!shopOpen && !hudVisible) {
-            if (watchBatteryPct <= 30 || isWatchCharging) {
-                accessories.drawBatteryBadge(canvas, 19, 2, watchBatteryPct, isWatchCharging, now);
-                Paint pctPaint = watchBatteryPct <= 15 ? grid.redPaint
-                        : watchBatteryPct <= 30 ? grid.orangePaint : grid.greenPaint;
-                grid.drawNumber3x5(canvas, 27, 2, watchBatteryPct, pctPaint);
-            } else if (isWatchFaceMode) {
-                accessories.drawClockHHMM(canvas, 2, now, grid.whitePaint);
-            }
-        }
 
-        accessories.drawMoodProps(canvas, mood, lookOffsetX, offsetY, shopOpen, actionStartTime, now);
+        accessories.drawMoodProps(canvas, mood, cx, head, shopOpen, actionStartTime, now);
         boolean anyParticle = updateAndDrawParticles(canvas, physDt, now);
 
         if (shopOpen) {
@@ -640,6 +683,7 @@ public final class PetEngine {
                 || anyParticle
                 || Math.abs(bounceY) > 0.05f
                 || Math.abs(squash) > 0.02f
+                || Math.abs(zoomTarget - faceZoom) > 0f
                 || Math.abs(targetLookX - lookX) > 0.15f
                 || Math.abs(targetLookY - lookY) > 0.15f
                 || (actionMood != MOOD_NONE && now < actionMoodUntil);
@@ -735,12 +779,40 @@ public final class PetEngine {
         return any;
     }
 
-    // ================================================================= Desenho: Olhos e Boca
+    // ================================================================= Desenho: Rosto (olhos, bochechas e boca)
+
+    /** Linha de referência da "cabeça": os olhos ficam em FACE_TOP + 7 (abaixo do relógio). */
+    private static final int FACE_TOP = 22;
+    /** Distância vertical dos olhos até a boca. */
+    private static final int MOUTH_OFFSET = 6;
+    /** Quanto o rosto cresce quando está sozinho, e a linha da grade que fica parada no zoom. */
+    private static final float IDLE_FACE_ZOOM = 1.55f;
+    private static final float FACE_ZOOM_PIVOT_ROW = 25.5f;
+
+    private static int clampInt(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private void mirrorPx(Canvas canvas, int cx, int dx, int y, Paint paint) {
+        grid.px(canvas, cx + dx, y, paint);
+        grid.px(canvas, cx + 1 - dx, y, paint);
+    }
+
+    /** Bochechas rosadas embaixo dos olhos. */
+    private void drawCheeks(Canvas canvas, int cx, int eyeY) {
+        mirrorPx(canvas, cx, -8, eyeY + 3, grid.blushPaint);
+        mirrorPx(canvas, cx, -7, eyeY + 3, grid.blushPaint);
+    }
 
     private void drawEyes(Canvas canvas, int leftX, int rightX, int y, int mood, long now) {
-        if (isBlinking || mood == MOOD_SLEEPING) {
-            drawClosedEye(canvas, leftX, y);
-            drawClosedEye(canvas, rightX, y);
+        if (mood == MOOD_SLEEPING) {
+            drawSleepingEye(canvas, leftX, y);
+            drawSleepingEye(canvas, rightX, y);
+            return;
+        }
+        if (isBlinking) {
+            grid.hline(canvas, leftX - 2, leftX + 2, y, grid.whitePaint);
+            grid.hline(canvas, rightX - 2, rightX + 2, y, grid.whitePaint);
             return;
         }
         switch (mood) {
@@ -749,8 +821,6 @@ public final class PetEngine {
             case MOOD_SHOWERING:
                 drawHappyArcEye(canvas, leftX, y);
                 drawHappyArcEye(canvas, rightX, y);
-                drawBlush(canvas, leftX - 6, y + 6);
-                drawBlush(canvas, rightX + 4, y + 6);
                 break;
 
             case MOOD_HUNGRY:
@@ -758,16 +828,15 @@ public final class PetEngine {
             case MOOD_THIRSTY:
                 drawOvalEye(canvas, leftX, y, true);
                 drawOvalEye(canvas, rightX, y, true);
-                // Sobrancelhas tristes.
-                grid.hline(canvas, leftX - 1, leftX + 2, y - 7, grid.whitePaint);
-                grid.hline(canvas, leftX - 4, leftX - 2, y - 6, grid.whitePaint);
-                grid.hline(canvas, rightX - 2, rightX + 1, y - 7, grid.whitePaint);
-                grid.hline(canvas, rightX + 2, rightX + 4, y - 6, grid.whitePaint);
+                // Sobrancelhas tristes (ponta de dentro levantada).
+                grid.hline(canvas, leftX - 2, leftX - 1, y - 4, grid.whitePaint);
+                grid.hline(canvas, leftX, leftX + 1, y - 5, grid.whitePaint);
+                grid.hline(canvas, rightX + 1, rightX + 2, y - 4, grid.whitePaint);
+                grid.hline(canvas, rightX - 1, rightX, y - 5, grid.whitePaint);
                 if (mood != MOOD_HUNGRY) {
                     // Lágrima escorrendo.
-                    int tearY = y + 6 + (int) ((now / 250L) % 3L);
-                    grid.px(canvas, leftX - 5, tearY, grid.cyanPaint);
-                    grid.px(canvas, leftX - 5, tearY + 1, grid.cyanPaint);
+                    int tearY = y + 1 + (int) ((now / 250L) % 3L);
+                    grid.px(canvas, leftX - 3, tearY, grid.cyanPaint);
                 }
                 break;
 
@@ -790,8 +859,6 @@ public final class PetEngine {
             case MOOD_WINK:
                 drawHappyArcEye(canvas, leftX, y);
                 drawOvalEye(canvas, rightX, y, false);
-                drawBlush(canvas, leftX - 6, y + 6);
-                drawBlush(canvas, rightX + 4, y + 6);
                 break;
 
             default:
@@ -801,131 +868,114 @@ public final class PetEngine {
         }
     }
 
-    private void drawClosedEye(Canvas canvas, int x, int y) {
-        grid.hline(canvas, x - 3, x + 3, y + 1, grid.whitePaint);
-        grid.px(canvas, x - 4, y, grid.whitePaint);
-        grid.px(canvas, x + 4, y, grid.whitePaint);
+    /** Contorno oval 5x6 preenchido de branco (base dos olhos). */
+    private void fillOval(Canvas canvas, int x, int y) {
+        grid.hline(canvas, x - 1, x + 1, y - 3, grid.whitePaint);
+        grid.rectPx(canvas, x - 2, y - 2, x + 2, y + 1, grid.whitePaint);
+        grid.hline(canvas, x - 1, x + 1, y + 2, grid.whitePaint);
     }
 
-    /** Olho oval branco com pupila preta otimizada (1 drawRect para a pupila + reflexo). */
-    private void drawOvalEye(Canvas canvas, int x, int y, boolean sadHighlight) {
-        grid.hline(canvas, x - 2, x + 2, y - 5, grid.whitePaint);
-        grid.hline(canvas, x - 3, x + 3, y - 4, grid.whitePaint);
-        grid.rectPx(canvas, x - 4, y - 3, x + 4, y + 3, grid.whitePaint);
-        grid.hline(canvas, x - 3, x + 3, y + 4, grid.whitePaint);
-        grid.hline(canvas, x - 2, x + 2, y + 5, grid.whitePaint);
-
-        int ox = Math.round(lookX * 0.45f);
-        int oy = Math.round(lookY * 0.45f);
-        // Apaga a área 5x5 da pupila de uma só vez e redesenha os pixels de brilho.
-        grid.rectSolid(canvas, x - 2 + ox, y - 2 + oy, x + 2 + ox, y + 2 + oy, grid.blackPaint);
-        grid.rectPx(canvas, x - 2 + ox, y - 2 + oy, x - 1 + ox, y - 1 + oy, grid.whitePaint);
-        if (sadHighlight) {
-            grid.px(canvas, x + 1 + ox, y + 2 + oy, grid.whitePaint);
+    /** Olho oval branco com pupila 3x3 que segue o olhar e um brilho (dois quando triste). */
+    private void drawOvalEye(Canvas canvas, int x, int y, boolean teary) {
+        fillOval(canvas, x, y);
+        int dx = clampInt(Math.round(lookX * 0.4f), -1, 1);
+        int dy = clampInt(Math.round(lookY * 0.4f), -1, 1);
+        grid.rectSolid(canvas, x - 1 + dx, y - 1 + dy, x + 1 + dx, y + 1 + dy, grid.blackPaint);
+        grid.px(canvas, x - 1 + dx, y - 1 + dy, grid.whitePaint);
+        if (teary) {
+            grid.px(canvas, x + 1 + dx, y + 1 + dy, grid.whitePaint);
         }
     }
 
+    private void drawSleepingEye(Canvas canvas, int x, int y) {
+        grid.px(canvas, x - 2, y, grid.whitePaint);
+        grid.hline(canvas, x - 1, x + 1, y + 1, grid.whitePaint);
+        grid.px(canvas, x + 2, y, grid.whitePaint);
+    }
+
+    /** Olho feliz "∩". */
     private void drawHappyArcEye(Canvas canvas, int x, int y) {
-        grid.hline(canvas, x - 2, x + 2, y - 3, grid.whitePaint);
-        grid.hline(canvas, x - 3, x + 3, y - 2, grid.whitePaint);
-        grid.px(canvas, x - 4, y - 1, grid.whitePaint);
-        grid.px(canvas, x - 3, y - 1, grid.whitePaint);
-        grid.px(canvas, x + 3, y - 1, grid.whitePaint);
-        grid.px(canvas, x + 4, y - 1, grid.whitePaint);
-        grid.px(canvas, x - 4, y, grid.whitePaint);
-        grid.px(canvas, x + 4, y, grid.whitePaint);
+        grid.hline(canvas, x - 1, x + 1, y - 1, grid.whitePaint);
+        grid.px(canvas, x - 2, y, grid.whitePaint);
+        grid.px(canvas, x + 2, y, grid.whitePaint);
+        grid.px(canvas, x - 2, y + 1, grid.whitePaint);
+        grid.px(canvas, x + 2, y + 1, grid.whitePaint);
     }
 
     private void drawHalfClosedEye(Canvas canvas, int x, int y) {
-        grid.hline(canvas, x - 4, x + 4, y, grid.whitePaint);
-        grid.hline(canvas, x - 3, x + 3, y + 1, grid.whitePaint);
-        grid.hline(canvas, x - 3, x + 3, y + 2, grid.whitePaint);
-        grid.hline(canvas, x - 2, x + 2, y + 3, grid.whitePaint);
+        grid.hline(canvas, x - 2, x + 2, y, grid.whitePaint);
+        grid.hline(canvas, x - 2, x + 2, y + 1, grid.whitePaint);
+        grid.hline(canvas, x - 1, x + 1, y + 2, grid.whitePaint);
+        grid.px(canvas, x, y + 1, grid.blackPaint);
     }
 
     private void drawGrumpyEye(Canvas canvas, int x, int y, boolean leftSide) {
-        grid.rectPx(canvas, x - 3, y - 1, x + 3, y + 3, grid.whitePaint);
-        grid.hline(canvas, x - 2, x + 2, y + 4, grid.whitePaint);
-        // Sobrancelha franzida apontando para o meio.
-        if (leftSide) {
-            grid.hline(canvas, x - 4, x - 2, y - 4, grid.whitePaint);
-            grid.hline(canvas, x - 1, x + 1, y - 3, grid.whitePaint);
-            grid.hline(canvas, x + 2, x + 4, y - 2, grid.whitePaint);
-        } else {
-            grid.hline(canvas, x + 2, x + 4, y - 4, grid.whitePaint);
-            grid.hline(canvas, x - 1, x + 1, y - 3, grid.whitePaint);
-            grid.hline(canvas, x - 4, x - 2, y - 2, grid.whitePaint);
-        }
+        grid.rectPx(canvas, x - 2, y - 1, x + 2, y + 1, grid.whitePaint);
+        grid.hline(canvas, x - 1, x + 1, y + 2, grid.whitePaint);
+        grid.px(canvas, x, y, grid.blackPaint);
+        // Sobrancelha franzida descendo para o meio do rosto.
+        int dir = leftSide ? 1 : -1;
+        grid.px(canvas, x - 2 * dir, y - 4, grid.whitePaint);
+        grid.px(canvas, x - dir, y - 4, grid.whitePaint);
+        grid.px(canvas, x, y - 3, grid.whitePaint);
+        grid.px(canvas, x + dir, y - 3, grid.whitePaint);
+        grid.px(canvas, x + 2 * dir, y - 2, grid.whitePaint);
     }
 
+    /** Olho arregalado: oval branco com pupilinha de 1 pixel. */
     private void drawSurprisedEye(Canvas canvas, int x, int y) {
-        grid.hline(canvas, x - 2, x + 2, y - 4, grid.whitePaint);
-        grid.hline(canvas, x - 3, x + 3, y - 3, grid.whitePaint);
-        grid.rectPx(canvas, x - 4, y - 2, x + 4, y + 2, grid.whitePaint);
-        grid.hline(canvas, x - 3, x + 3, y + 3, grid.whitePaint);
-        grid.hline(canvas, x - 2, x + 2, y + 4, grid.whitePaint);
-        // Pupila grande com um pontinho de brilho no centro (otimizado para 2 draw calls).
-        grid.rectSolid(canvas, x - 2, y - 2, x + 2, y + 2, grid.blackPaint);
-        grid.px(canvas, x, y, grid.whitePaint);
+        fillOval(canvas, x, y);
+        grid.px(canvas, x, y - 1, grid.blackPaint);
+        grid.px(canvas, x, y, grid.blackPaint);
     }
 
-    private void drawBlush(Canvas canvas, int x, int y) {
-        grid.px(canvas, x, y, grid.blushPaint);
-        grid.px(canvas, x + 2, y, grid.blushPaint);
-        grid.px(canvas, x + 1, y + 1, grid.blushPaint);
-    }
-
-    private void drawMouth(Canvas canvas, int x, int y, int mood, long now) {
+    /** Boquinha centrada entre cx e cx + 1. */
+    private void drawMouth(Canvas canvas, int cx, int y, int mood, long now) {
+        Paint ink = grid.whitePaint;
         switch (mood) {
             case MOOD_LOVED:
             case MOOD_SHOWERING:
-                // Sorrisão aberto com linguinha.
-                grid.hline(canvas, x - 5, x + 5, y, grid.whitePaint);
-                grid.hline(canvas, x - 4, x + 4, y + 1, grid.whitePaint);
-                grid.hline(canvas, x - 4, x + 4, y + 2, grid.whitePaint);
-                grid.hline(canvas, x - 3, x + 3, y + 3, grid.whitePaint);
-                grid.hline(canvas, x - 2, x + 2, y + 4, grid.blushPaint);
+                // Boquinha aberta com linguinha.
+                grid.hline(canvas, cx - 1, cx + 2, y, ink);
+                grid.px(canvas, cx - 1, y + 1, ink);
+                grid.hline(canvas, cx, cx + 1, y + 1, grid.pinkPaint);
+                grid.px(canvas, cx + 2, y + 1, ink);
+                grid.hline(canvas, cx, cx + 1, y + 2, ink);
                 break;
 
             case MOOD_HUNGRY:
+                grid.hline(canvas, cx - 1, cx + 2, y + 1, ink);
+                // Babinha.
+                grid.px(canvas, cx + 2, y + 2, grid.cyanPaint);
+                if ((now / 400L) % 2L == 0L) {
+                    grid.px(canvas, cx + 2, y + 3, grid.cyanPaint);
+                }
+                break;
+
+            case MOOD_SAD:
             case MOOD_THIRSTY:
             case MOOD_LOW_BATTERY:
-                grid.hline(canvas, x - 2, x + 2, y, grid.whitePaint);
-                grid.px(canvas, x - 3, y + 1, grid.whitePaint);
-                grid.px(canvas, x + 3, y + 1, grid.whitePaint);
-                if (mood == MOOD_HUNGRY) {
-                    // Babinha.
-                    grid.px(canvas, x + 3, y + 2, grid.cyanPaint);
-                    if ((now / 400L) % 2L == 0L) {
-                        grid.px(canvas, x + 3, y + 3, grid.cyanPaint);
-                    }
-                }
+                grid.hline(canvas, cx, cx + 1, y, ink);
+                grid.px(canvas, cx - 1, y + 1, ink);
+                grid.px(canvas, cx + 2, y + 1, ink);
                 break;
 
             case MOOD_SLEEPY:
             case MOOD_SURPRISED:
-                drawOMouth(canvas, x, y);
+                drawOMouth(canvas, cx, y);
                 break;
 
             case MOOD_SLEEPING: {
                 int half = (now / 900L) % 2L == 0L ? 1 : 2; // respiração
-                grid.hline(canvas, x - half, x + half, y + 1, grid.whitePaint);
+                grid.hline(canvas, cx + 1 - half, cx + half, y + 1, ink);
                 break;
             }
 
-            case MOOD_SAD:
-                grid.hline(canvas, x - 3, x + 3, y, grid.whitePaint);
-                grid.px(canvas, x - 4, y + 1, grid.whitePaint);
-                grid.px(canvas, x + 4, y + 1, grid.whitePaint);
-                grid.px(canvas, x - 5, y + 2, grid.whitePaint);
-                grid.px(canvas, x + 5, y + 2, grid.whitePaint);
-                break;
-
             case MOOD_GRUMPY:
-                // Boca em zigue-zague.
-                for (int dx = -3; dx <= 3; dx++) {
-                    grid.px(canvas, x + dx, (dx & 1) != 0 ? y + 1 : y, grid.whitePaint);
-                }
+                grid.px(canvas, cx - 1, y + 1, ink);
+                grid.px(canvas, cx, y, ink);
+                grid.px(canvas, cx + 1, y + 1, ink);
+                grid.px(canvas, cx + 2, y, ink);
                 break;
 
             case MOOD_EATING:
@@ -934,105 +984,116 @@ public final class PetEngine {
                     lastChewTime = now;
                 }
                 if (chewStep != 0) {
-                    grid.hline(canvas, x - 3, x + 3, y + 1, grid.whitePaint);
-                    grid.px(canvas, x - 4, y, grid.whitePaint);
-                    grid.px(canvas, x + 4, y, grid.whitePaint);
+                    grid.hline(canvas, cx - 1, cx + 2, y + 1, ink);
                 } else {
-                    grid.hline(canvas, x - 3, x + 3, y - 1, grid.whitePaint);
-                    grid.rectPx(canvas, x - 4, y, x + 4, y + 3, grid.whitePaint);
-                    grid.hline(canvas, x - 3, x + 3, y + 4, grid.whitePaint);
+                    grid.hline(canvas, cx, cx + 1, y, ink);
+                    grid.hline(canvas, cx - 1, cx + 2, y + 1, ink);
+                    grid.hline(canvas, cx, cx + 1, y + 2, ink);
                 }
                 break;
 
             case MOOD_WINK:
-                // Boquinha de gato ":3".
-                grid.px(canvas, x - 4, y, grid.whitePaint);
-                grid.hline(canvas, x - 3, x - 1, y + 1, grid.whitePaint);
-                grid.px(canvas, x, y, grid.whitePaint);
-                grid.hline(canvas, x + 1, x + 3, y + 1, grid.whitePaint);
-                grid.px(canvas, x + 4, y, grid.whitePaint);
+                // Boquinha de gato "w".
+                grid.px(canvas, cx - 2, y, ink);
+                grid.px(canvas, cx - 1, y + 1, ink);
+                grid.hline(canvas, cx, cx + 1, y, ink);
+                grid.px(canvas, cx + 2, y + 1, ink);
+                grid.px(canvas, cx + 3, y, ink);
                 break;
 
             case MOOD_DRINKING:
-                drawOMouth(canvas, x, y);
+                drawOMouth(canvas, cx, y);
                 if ((now / 180L) % 2L == 0L) {
-                    grid.px(canvas, x + 3, y + 1, grid.cyanPaint);
-                    grid.px(canvas, x + 4, y + 1, grid.cyanPaint);
+                    grid.px(canvas, cx + 3, y + 1, grid.cyanPaint);
+                    grid.px(canvas, cx + 4, y + 1, grid.cyanPaint);
                 }
                 break;
 
             default:
-                // Sorriso simples.
-                grid.px(canvas, x - 5, y, grid.whitePaint);
-                grid.px(canvas, x + 5, y, grid.whitePaint);
-                grid.px(canvas, x - 4, y + 1, grid.whitePaint);
-                grid.px(canvas, x + 4, y + 1, grid.whitePaint);
-                grid.hline(canvas, x - 3, x + 3, y + 2, grid.whitePaint);
-                grid.hline(canvas, x - 2, x + 2, y + 3, grid.whitePaint);
+                // Sorrisinho.
+                grid.px(canvas, cx - 1, y, ink);
+                grid.hline(canvas, cx, cx + 1, y + 1, ink);
+                grid.px(canvas, cx + 2, y, ink);
                 break;
         }
     }
 
-    private void drawOMouth(Canvas canvas, int x, int y) {
-        grid.hline(canvas, x - 1, x + 1, y, grid.whitePaint);
-        grid.px(canvas, x - 2, y + 1, grid.whitePaint);
-        grid.px(canvas, x + 2, y + 1, grid.whitePaint);
-        grid.px(canvas, x - 2, y + 2, grid.whitePaint);
-        grid.px(canvas, x + 2, y + 2, grid.whitePaint);
-        grid.hline(canvas, x - 1, x + 1, y + 3, grid.whitePaint);
+    private void drawOMouth(Canvas canvas, int cx, int y) {
+        grid.hline(canvas, cx, cx + 1, y, grid.whitePaint);
+        grid.px(canvas, cx - 1, y + 1, grid.whitePaint);
+        grid.px(canvas, cx + 2, y + 1, grid.whitePaint);
+        grid.hline(canvas, cx, cx + 1, y + 2, grid.whitePaint);
     }
 
     // ================================================================= Desenho: Loja e HUD
 
     private void drawShopOverlay(Canvas canvas) {
-        // Moedas no topo.
-        grid.rectPx(canvas, 17, 4, 19, 8, grid.goldPaint);
-        grid.px(canvas, 18, 5, grid.whitePaint);
-        grid.drawNumber3x5(canvas, 22, 4, state.coins, grid.goldPaint);
+        // Topo: moedas à esquerda e X de sair à direita.
+        grid.rectPx(canvas, 12, 5, 14, 9, grid.goldPaint);
+        grid.px(canvas, 13, 6, grid.whitePaint);
+        grid.drawNumber3x5(canvas, 17, 5, state.coins, grid.goldPaint);
+        grid.drawSprite5x5(canvas, 34, 5, SPRITE_TAB_CLOSE, grid.redPaint);
+
+        // Botão de baixo: preço (comprar) ou check (verde = já está usando, ciano = é seu, toque p/ usar).
+        int item = shopPreview[shopCategory];
+        if (state.isUnlocked(shopCategory, item)) {
+            Paint check = state.equipped[shopCategory] == item ? grid.greenPaint : grid.cyanPaint;
+            grid.px(canvas, 22, 48, check);
+            grid.px(canvas, 23, 49, check);
+            grid.px(canvas, 24, 50, check);
+            grid.px(canvas, 25, 49, check);
+            grid.px(canvas, 26, 48, check);
+            grid.px(canvas, 27, 47, check);
+            grid.px(canvas, 28, 46, check);
+        } else {
+            int price = ITEM_PRICES[shopCategory][item];
+            grid.rectPx(canvas, 18, 46, 20, 50, grid.goldPaint);
+            grid.px(canvas, 19, 47, grid.whitePaint);
+            grid.drawNumber3x5(canvas, 23, 46, price, state.coins >= price ? grid.goldPaint : grid.redPaint);
+        }
 
         // Setinhas < >.
-        grid.px(canvas, 6, 25, grid.whitePaint);
-        grid.px(canvas, 7, 24, grid.whitePaint);
-        grid.px(canvas, 7, 26, grid.whitePaint);
-        grid.px(canvas, 8, 23, grid.whitePaint);
-        grid.px(canvas, 8, 27, grid.whitePaint);
-        grid.px(canvas, 45, 25, grid.whitePaint);
-        grid.px(canvas, 44, 24, grid.whitePaint);
-        grid.px(canvas, 44, 26, grid.whitePaint);
-        grid.px(canvas, 43, 23, grid.whitePaint);
-        grid.px(canvas, 43, 27, grid.whitePaint);
+        grid.px(canvas, 3, 28, grid.whitePaint);
+        grid.px(canvas, 4, 27, grid.whitePaint);
+        grid.px(canvas, 4, 29, grid.whitePaint);
+        grid.px(canvas, 5, 26, grid.whitePaint);
+        grid.px(canvas, 5, 30, grid.whitePaint);
+        grid.px(canvas, 48, 28, grid.whitePaint);
+        grid.px(canvas, 47, 27, grid.whitePaint);
+        grid.px(canvas, 47, 29, grid.whitePaint);
+        grid.px(canvas, 46, 26, grid.whitePaint);
+        grid.px(canvas, 46, 30, grid.whitePaint);
 
-        int item = shopPreviewItem;
-        if (state.isUnlocked(item)) {
-            // Check: verde se já está equipado, ciano se só comprado.
-            Paint check = state.equippedItem == item ? grid.greenPaint : grid.cyanPaint;
-            grid.px(canvas, 23, 43, check);
-            grid.px(canvas, 24, 44, check);
-            grid.px(canvas, 25, 43, check);
-            grid.px(canvas, 26, 42, check);
-            grid.px(canvas, 27, 41, check);
-            return;
+        // Abas: cabeça | nariz | olhos.
+        drawShopTab(canvas, 14, SPRITE_TAB_HAT, CATEGORY_HEAD, grid.goldPaint);
+        drawShopTab(canvas, 23, SPRITE_TAB_NOSE, CATEGORY_NOSE, grid.clownRedPaint);
+        drawShopTab(canvas, 32, SPRITE_TAB_EYE, CATEGORY_EYES, grid.cyanPaint);
+    }
+
+    private void drawShopTab(Canvas canvas, int x, int[] sprite, int category, Paint activePaint) {
+        boolean active = shopCategory == category;
+        grid.drawSprite5x5(canvas, x, 38, sprite, active ? activePaint : grid.dimPaint);
+        if (active) {
+            grid.hline(canvas, x, x + 4, 44, grid.whitePaint);
         }
-        int price = ITEM_PRICES[item];
-        grid.rectPx(canvas, 19, 41, 20, 44, grid.goldPaint);
-        grid.drawNumber3x5(canvas, 23, 41, price, state.coins >= price ? grid.goldPaint : grid.redPaint);
     }
 
     private void drawMinimalHud(Canvas canvas, long now) {
-        if (showBatteryInsteadOfClock) {
-            accessories.drawBatteryBadge(canvas, 19, 2, watchBatteryPct, isWatchCharging, now);
-            grid.drawNumber3x5(canvas, 27, 2, watchBatteryPct, grid.whitePaint);
+        // Bateria: anel fininho na borda.
+        accessories.drawBatteryRing(canvas, watchBatteryPct, isWatchCharging, now);
+
+        // Relógio (tocar troca para a data).
+        if (showDateInsteadOfClock) {
+            accessories.drawDateDDMM(canvas, HUD_CLOCK_Y, grid.whitePaint);
         } else {
-            accessories.drawClockHHMM(canvas, 2, now, grid.whitePaint);
-            if (watchBatteryPct <= 30 || isWatchCharging) {
-                accessories.drawBatteryBadge(canvas, 9, 2, watchBatteryPct, isWatchCharging, now);
-            }
+            accessories.drawClockHHMM(canvas, HUD_CLOCK_Y, now, grid.whitePaint);
         }
 
-        accessories.drawMiniStatBar(canvas, 13, 8, state.hunger, grid.orangePaint);
-        accessories.drawMiniStatBar(canvas, 20, 8, state.water, grid.cyanPaint);
-        accessories.drawMiniStatBar(canvas, 27, 8, state.happiness, grid.pinkPaint);
-        accessories.drawMiniStatBar(canvas, 34, 8, state.energy, grid.goldPaint);
+        int barsY = HUD_CLOCK_Y + 7;
+        accessories.drawMiniStatBar(canvas, 13, barsY, state.hunger, grid.orangePaint);
+        accessories.drawMiniStatBar(canvas, 20, barsY, state.water, grid.cyanPaint);
+        accessories.drawMiniStatBar(canvas, 27, barsY, state.happiness, grid.pinkPaint);
+        accessories.drawMiniStatBar(canvas, 34, barsY, state.energy, grid.goldPaint);
 
         // Barra de ações: comer | água | carinho | dormir/acordar | loja.
         accessories.drawApple(canvas, 10, 42);

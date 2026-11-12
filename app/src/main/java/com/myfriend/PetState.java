@@ -18,9 +18,38 @@ public final class PetState {
     public int mealsSincePoop = 0;
     public int poopCount = 0;
     public int coins = INITIAL_COINS;
-    public int equippedItem = ITEM_SANTA_HAT;
-    /** Bit N ligado = item N comprado. Começa com "nenhum" e gorro de Natal. */
-    public int unlockedMask = 0b11;
+    /** Item equipado em cada categoria (cabeça, nariz, olhos). */
+    public final int[] equipped = {HEAD_SANTA_HAT, ITEM_NONE, ITEM_NONE};
+    /** Por categoria: bit N ligado = item N comprado. "Nada" vem sempre liberado. */
+    public final int[] unlocked = {0b11, 0b1, 0b1};
+
+    private static final String[] KEY_EQUIPPED = {"equippedHead", "equippedNose", "equippedEyes"};
+    private static final String[] KEY_UNLOCKED = {"unlockedHead", "unlockedNose", "unlockedEyes"};
+
+    /**
+     * Como os itens da loja antiga (uma lista só, v1.6) viram itens por categoria.
+     * {categoria, item}; o palhaço antigo vira cabelo + nariz. -1 = item que deixou de existir.
+     */
+    private static final int[][][] LEGACY_ITEMS = {
+            {},                                                   // 0 nada
+            {{CATEGORY_HEAD, HEAD_SANTA_HAT}},                    // 1
+            {{CATEGORY_HEAD, HEAD_WITCH_HAT}},                    // 2
+            {{CATEGORY_HEAD, HEAD_PUMPKIN}},                      // 3
+            {{CATEGORY_HEAD, HEAD_DEVIL_HORNS}},                  // 4
+            {{CATEGORY_EYES, EYES_SUNGLASSES}},                   // 5
+            {{CATEGORY_HEAD, HEAD_CROWN}},                        // 6
+            {{CATEGORY_HEAD, HEAD_WIZARD_HAT}},                   // 7
+            {},                                                   // 8 gravatinha (removida)
+            {{CATEGORY_HEAD, HEAD_HEADPHONES}},                   // 9
+            {{CATEGORY_HEAD, HEAD_HEADBAND}},                     // 10
+            {{CATEGORY_HEAD, HEAD_BUNNY_EARS}},                   // 11
+            {{CATEGORY_HEAD, HEAD_BIRTHDAY_HAT}},                 // 12
+            {},                                                   // 13 carnaval (removido)
+            {{CATEGORY_HEAD, HEAD_HALO}},                         // 14
+            {{CATEGORY_HEAD, HEAD_STRAW_HAT}},                    // 15
+            {{CATEGORY_EYES, EYES_PARTY_GLASSES}},                // 16
+            {{CATEGORY_HEAD, HEAD_CLOWN_HAIR}, {CATEGORY_NOSE, NOSE_CLOWN}}, // 17
+    };
 
     private final SharedPreferences prefs;
 
@@ -37,10 +66,26 @@ public final class PetState {
         poopCount = prefs.getInt("poopCount", 0);
         mealsSincePoop = prefs.getInt("mealsSincePoop", 0);
         coins = Math.max(0, prefs.getInt("coins", INITIAL_COINS));
-        equippedItem = prefs.getInt("equippedItem", ITEM_SANTA_HAT);
-        unlockedMask = prefs.getInt("unlockedMask", 0b11) | 0b11;
-        if (equippedItem < 0 || equippedItem >= TOTAL_ITEMS) {
-            equippedItem = ITEM_NONE;
+        if (!prefs.contains(KEY_EQUIPPED[CATEGORY_HEAD]) && prefs.contains("unlockedMask")) {
+            migrateLegacyItems();
+        } else {
+            for (int c = 0; c < CATEGORY_COUNT; c++) {
+                equipped[c] = prefs.getInt(KEY_EQUIPPED[c], c == CATEGORY_HEAD ? HEAD_SANTA_HAT : ITEM_NONE);
+                unlocked[c] = prefs.getInt(KEY_UNLOCKED[c], c == CATEGORY_HEAD ? 0b11 : 0b1);
+            }
+            int itemsVersion = prefs.getInt("itemsVersion", 1);
+            if (itemsVersion < 2) {
+                removeHeadItem(REMOVED_HEAD_CARNIVAL, REMOVED_CARNIVAL_PRICE);
+            }
+            if (itemsVersion < 3) {
+                removeHeadItem(REMOVED_HEAD_DIVINE_WHEEL, REMOVED_DIVINE_WHEEL_PRICE);
+            }
+        }
+        for (int c = 0; c < CATEGORY_COUNT; c++) {
+            unlocked[c] |= 1; // "nada" sempre disponível
+            if (equipped[c] < 0 || equipped[c] >= itemCount(c) || !isUnlocked(c, equipped[c])) {
+                equipped[c] = ITEM_NONE;
+            }
         }
 
         long nowWall = System.currentTimeMillis();
@@ -76,8 +121,15 @@ public final class PetState {
                 .putInt("poopCount", poopCount)
                 .putInt("mealsSincePoop", mealsSincePoop)
                 .putInt("coins", coins)
-                .putInt("equippedItem", equippedItem)
-                .putInt("unlockedMask", unlockedMask)
+                .putInt(KEY_EQUIPPED[CATEGORY_HEAD], equipped[CATEGORY_HEAD])
+                .putInt(KEY_EQUIPPED[CATEGORY_NOSE], equipped[CATEGORY_NOSE])
+                .putInt(KEY_EQUIPPED[CATEGORY_EYES], equipped[CATEGORY_EYES])
+                .putInt(KEY_UNLOCKED[CATEGORY_HEAD], unlocked[CATEGORY_HEAD])
+                .putInt(KEY_UNLOCKED[CATEGORY_NOSE], unlocked[CATEGORY_NOSE])
+                .putInt(KEY_UNLOCKED[CATEGORY_EYES], unlocked[CATEGORY_EYES])
+                .putInt("itemsVersion", 3)
+                .remove("equippedItem")
+                .remove("unlockedMask")
                 .putLong("savedTime", System.currentTimeMillis())
                 .apply();
     }
@@ -96,8 +148,48 @@ public final class PetState {
         }
     }
 
-    public boolean isUnlocked(int item) {
-        return ((unlockedMask >> item) & 1) != 0;
+    public boolean isUnlocked(int category, int item) {
+        return ((unlocked[category] >> item) & 1) != 0;
+    }
+
+    public void unlock(int category, int item) {
+        unlocked[category] |= 1 << item;
+    }
+
+    /**
+     * Tira um item de cabeça que saiu da loja (cocar na v1.9, roda divina na v1.10): quem tinha
+     * recebe as moedas de volta e os itens depois dele descem uma posição.
+     */
+    private void removeHeadItem(int id, int refund) {
+        int mask = unlocked[CATEGORY_HEAD];
+        if (((mask >> id) & 1) != 0) {
+            coins += refund;
+        }
+        int low = mask & ((1 << id) - 1);
+        int high = (mask >>> (id + 1)) << id;
+        unlocked[CATEGORY_HEAD] = low | high;
+        int eq = equipped[CATEGORY_HEAD];
+        equipped[CATEGORY_HEAD] = eq == id ? ITEM_NONE : (eq > id ? eq - 1 : eq);
+    }
+
+    private void migrateLegacyItems() {
+        int oldMask = prefs.getInt("unlockedMask", 0b11);
+        int oldEquipped = prefs.getInt("equippedItem", 1);
+        for (int c = 0; c < CATEGORY_COUNT; c++) {
+            equipped[c] = ITEM_NONE;
+            unlocked[c] = 1;
+        }
+        for (int old = 1; old < LEGACY_ITEMS.length; old++) {
+            boolean owned = ((oldMask >> old) & 1) != 0;
+            for (int[] mapped : LEGACY_ITEMS[old]) {
+                if (owned) {
+                    unlocked[mapped[0]] |= 1 << mapped[1];
+                }
+                if (old == oldEquipped) {
+                    equipped[mapped[0]] = mapped[1];
+                }
+            }
+        }
     }
 
     public static float clamp(float value) {

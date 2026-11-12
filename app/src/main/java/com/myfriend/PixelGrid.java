@@ -20,6 +20,12 @@ public final class PixelGrid {
     public static final int[] SPRITE_WATER_DROP = {4, 4, 14, 31, 14};
     public static final int[] SPRITE_SHOP_CROWN = {21, 31, 31, 31, 0};
 
+    // Abas da loja
+    public static final int[] SPRITE_TAB_CLOSE = {17, 10, 4, 10, 17};
+    public static final int[] SPRITE_TAB_HAT = {14, 14, 14, 31, 0};
+    public static final int[] SPRITE_TAB_NOSE = {14, 31, 31, 31, 14};
+    public static final int[] SPRITE_TAB_EYE = {0, 14, 27, 14, 0};
+
     private static final int[][] DIGITS_3X5 = {
             {7, 5, 5, 5, 7}, {2, 6, 2, 2, 7}, {7, 1, 7, 4, 7}, {7, 1, 7, 1, 7}, {5, 5, 7, 1, 1},
             {7, 4, 7, 1, 7}, {7, 4, 7, 5, 7}, {7, 1, 1, 1, 1}, {7, 5, 7, 5, 7}, {7, 5, 7, 1, 7},
@@ -29,6 +35,15 @@ public final class PixelGrid {
 
     public final Paint whitePaint = makePaint(0xFFFFFFFF);
     public final Paint dimPaint = makePaint(0xFF444444);
+    public final Paint ringTrackPaint = makePaint(0xFF1C1C1C);
+    // Bonés de encanador e disfarce.
+    public final Paint capRedPaint = makePaint(0xFFE53935);
+    public final Paint capRedDarkPaint = makePaint(0xFFB71C1C);
+    public final Paint capGreenPaint = makePaint(0xFF2ECC40);
+    public final Paint capGreenDarkPaint = makePaint(0xFF1B7A2A);
+    public final Paint skinPaint = makePaint(0xFFFFC7A8);
+    public final Paint skinShadePaint = makePaint(0xFFE89A7A);
+    public final Paint bushyBrowPaint = makePaint(0xFF6D4C41);
     public final Paint cyanPaint = makePaint(0xFF00E5FF);
     public final Paint deepBluePaint = makePaint(0xFF0091EA);
     public final Paint pinkPaint = makePaint(0xFFFF4081);
@@ -43,6 +58,10 @@ public final class PixelGrid {
     public final Paint clownRedPaint = makePaint(0xFFFF1744);
     public final Paint clownHairPaint = makePaint(0xFFFF6D00);
     public final Paint blackPaint = makePaint(0xFF000000);
+
+    // Tapa-olho: borda e tira cinza-claro para aparecer no fundo preto.
+    public final Paint patchPaint = makePaint(0xFF9E9E9E);
+    public final Paint patchStrapPaint = makePaint(0xFF9E9E9E);
 
     // ---------------------------------------------------------------- Métricas
 
