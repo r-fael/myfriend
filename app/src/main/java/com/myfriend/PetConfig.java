@@ -81,6 +81,7 @@ public final class PetConfig {
     public static final int HEAD_CLOWN_HAIR = 13;
     public static final int HEAD_PLUMBER_RED = 14;
     public static final int HEAD_PLUMBER_GREEN = 15;
+    public static final int HEAD_CAT_EARS = 16;
     /** Id do cocar de carnaval (removido na v1.9), usado só para migrar o que estava salvo. */
     public static final int REMOVED_HEAD_CARNIVAL = 11;
     public static final int REMOVED_CARNIVAL_PRICE = 50;
@@ -137,6 +138,7 @@ public final class PetConfig {
                     40, // cabelo de palhaço
                     60, // boné vermelho de encanador
                     60, // boné verde de encanador
+                    45, // orelhas de gatinho
             },
             { // nariz
                     0,  // nada

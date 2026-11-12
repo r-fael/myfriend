@@ -626,6 +626,17 @@ public final class PetAccessoryRenderer {
                 drawPlumberCap(canvas, cx, base, g.capGreenPaint, g.capGreenDarkPaint, false);
                 break;
 
+            case HEAD_CAT_EARS:
+                // Tiara com duas orelhas pontudas, borda de fora reta e rosinha por dentro.
+                band(canvas, cx, 7, base, g.pinkPaint);
+                for (int i = 1; i <= 6; i++) {
+                    mirrorHline(canvas, cx, -7, -1 - i, base - i, g.whitePaint);
+                }
+                for (int i = 2; i <= 4; i++) {
+                    mirrorHline(canvas, cx, -6, -2 - i, base - i, g.blushPaint);
+                }
+                break;
+
             default:
                 break;
         }
