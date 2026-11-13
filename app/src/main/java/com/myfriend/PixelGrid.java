@@ -26,7 +26,9 @@ public final class PixelGrid {
     public static final int[] SPRITE_TAB_NOSE = {14, 31, 31, 31, 14};
     public static final int[] SPRITE_TAB_EYE = {0, 14, 27, 14, 0};
     public static final int[] SPRITE_TAB_NECK = {17, 27, 31, 27, 17};
-    public static final int[] SPRITE_TAB_BG = {4, 14, 31, 14, 10};
+    /** Abas da lancheira: comida (maçã) e bebida (copo). */
+    public static final int[] SPRITE_TAB_FOOD = {6, 14, 31, 31, 14};
+    public static final int[] SPRITE_TAB_DRINK = {17, 17, 31, 31, 14};
     /** Aba "segurar": espadinha na diagonal. */
     public static final int[] SPRITE_TAB_HOLD = {1, 2, 20, 8, 20};
     /** Tênis (passos do dia). */
@@ -46,18 +48,12 @@ public final class PixelGrid {
     public final Paint whitePaint = makePaint(0xFFFFFFFF);
     public final Paint dimPaint = makePaint(0xFF444444);
     public final Paint ringTrackPaint = makePaint(0xFF1C1C1C);
-    // Cores do rostinho.
     // Coisas para segurar.
     public final Paint silverPaint = makePaint(0xFFCFD8DC);
     public final Paint stemPaint = makePaint(0xFF2E9E5B);
     public final Paint woodPaint = makePaint(0xFF5D4037);
     public final Paint conePaint = makePaint(0xFFD69A4E);
     public final Paint glassPaint = makePaint(0xFF90A4AE);
-    // Fundos (bem apagadinhos para quase não gastar bateria no OLED).
-    public final Paint starDimPaint = makePaint(0xFF4A4426);
-    public final Paint starBrightPaint = makePaint(0xFFB8A64A);
-    public final Paint rainPaint = makePaint(0xFF1F4F66);
-    public final Paint snowPaint = makePaint(0xFF6E7C84);
     // De costas e modo tela desligada.
     public final Paint backHeadPaint = makePaint(0xFF2A2A2A);
     public final Paint ambientPaint = makePaint(0xFF8A8A8A);

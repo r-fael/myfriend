@@ -18,7 +18,7 @@ public final class PetState {
     public int mealsSincePoop = 0;
     public int poopCount = 0;
     public int coins = INITIAL_COINS;
-    /** Item equipado em cada categoria (cabeça, nariz, olhos, pescoço, cor, fundo). */
+    /** Item equipado em cada categoria (roupinhas) ou a última comida/bebida escolhida. */
     public final int[] equipped = new int[CATEGORY_COUNT];
     /** Por categoria: bit N ligado = item N comprado. "Nada" vem sempre liberado. */
     public final int[] unlocked = new int[CATEGORY_COUNT];
@@ -37,9 +37,9 @@ public final class PetState {
     public boolean nightSleep = false;
 
     private static final String[] KEY_EQUIPPED = {"equippedHead", "equippedNose", "equippedEyes",
-            "equippedNeck", "equippedHold", "equippedBg"};
+            "equippedNeck", "equippedHold", "equippedFood", "equippedDrink"};
     private static final String[] KEY_UNLOCKED = {"unlockedHead", "unlockedNose", "unlockedEyes",
-            "unlockedNeck", "unlockedHold", "unlockedBg"};
+            "unlockedNeck", "unlockedHold", "unlockedFood", "unlockedDrink"};
 
     {
         equipped[CATEGORY_HEAD] = HEAD_SANTA_HAT;
@@ -119,6 +119,15 @@ public final class PetState {
                     }
                 }
             }
+            if (itemsVersion < 5) {
+                // Os fundos animados saíram: devolve as moedas de cada fundo comprado.
+                int backgrounds = prefs.getInt("unlockedBg", 0b1);
+                for (int i = 1; i < REMOVED_BG_PRICES.length; i++) {
+                    if (((backgrounds >> i) & 1) != 0) {
+                        coins += REMOVED_BG_PRICES[i];
+                    }
+                }
+            }
         }
         for (int c = 0; c < CATEGORY_COUNT; c++) {
             unlocked[c] |= 1; // "nada" sempre disponível
@@ -161,11 +170,13 @@ public final class PetState {
                 .putInt("stretchDay", stretchDay)
                 .putLong("lastSeenWall", lastSeenWall)
                 .putBoolean("nightSleep", nightSleep)
-                .putInt("itemsVersion", 4)
+                .putInt("itemsVersion", 5)
                 .remove("equippedItem")
                 .remove("unlockedMask")
                 .remove("equippedColor")
                 .remove("unlockedColor")
+                .remove("equippedBg")
+                .remove("unlockedBg")
                 .putLong("savedTime", System.currentTimeMillis())
                 .apply();
     }

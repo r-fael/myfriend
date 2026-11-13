@@ -125,14 +125,158 @@ public final class PetAccessoryRenderer {
     }
 
     public void drawWaterCup(Canvas canvas, int x, int y, int level) {
-        for (int row = 0; row < 5; row++) {
-            g.px(canvas, x, y + row, g.whitePaint);
-            g.px(canvas, x + 4, y + row, g.whitePaint);
+        drawDrinkCup(canvas, x, y, level, DRINK_WATER);
+    }
+
+    /** Cor do líquido de cada bebida (o golinho no canudo usa a mesma). */
+    public Paint drinkPaint(int drink) {
+        switch (drink) {
+            case DRINK_JUICE: return g.orangePaint;
+            case DRINK_MILK: return g.whitePaint;
+            case DRINK_SODA: return g.capGreenPaint;
+            case DRINK_SHAKE: return g.pinkPaint;
+            case DRINK_BUBBLE_TEA: return g.conePaint;
+            default: return g.deepBluePaint;
         }
-        g.hline(canvas, x + 1, x + 3, y + 5, g.whitePaint);
+    }
+
+    /** Copo 5x6 com a bebida escolhida; {@code level} de 0 (vazio) a 4 (cheio). */
+    public void drawDrinkCup(Canvas canvas, int x, int y, int level, int drink) {
+        // O leite é branco, então o copo dele é cinza para dar contraste.
+        Paint glass = drink == DRINK_MILK ? g.glassPaint : g.whitePaint;
+        for (int row = 0; row < 5; row++) {
+            g.px(canvas, x, y + row, glass);
+            g.px(canvas, x + 4, y + row, glass);
+        }
+        g.hline(canvas, x + 1, x + 3, y + 5, glass);
         int fill = Math.max(0, Math.min(4, level));
+        Paint body = drinkPaint(drink);
+        Paint surface;
+        switch (drink) {
+            case DRINK_JUICE: surface = g.goldPaint; break;
+            case DRINK_MILK: surface = g.silverPaint; break;
+            case DRINK_SODA: surface = g.greenPaint; break;
+            case DRINK_SHAKE: surface = g.blushPaint; break;
+            case DRINK_BUBBLE_TEA: surface = g.skinPaint; break;
+            default: surface = g.cyanPaint; break;
+        }
         for (int i = 0; i < fill; i++) {
-            g.hline(canvas, x + 1, x + 3, y + 4 - i, i == fill - 1 ? g.cyanPaint : g.deepBluePaint);
+            g.hline(canvas, x + 1, x + 3, y + 4 - i, i == fill - 1 ? surface : body);
+        }
+        if (drink == DRINK_BUBBLE_TEA && fill > 0) {
+            // Bolinhas de tapioca no fundo.
+            g.px(canvas, x + 1, y + 4, g.woodPaint);
+            g.px(canvas, x + 3, y + 4, g.woodPaint);
+            if (fill > 2) {
+                g.px(canvas, x + 2, y + 3, g.woodPaint);
+            }
+        }
+        if (drink == DRINK_SHAKE && fill == 4) {
+            g.px(canvas, x + 2, y, g.redPaint); // cerejinha
+        }
+    }
+
+    /** Comida 5x5 (o canto de cima à esquerda é x, y). */
+    public void drawFood(Canvas canvas, int x, int y, int food) {
+        switch (food) {
+            case FOOD_BANANA:
+                g.px(canvas, x + 4, y, g.brownPaint);
+                g.hline(canvas, x + 3, x + 4, y + 1, g.goldPaint);
+                g.hline(canvas, x + 2, x + 4, y + 2, g.goldPaint);
+                g.hline(canvas, x, x + 3, y + 3, g.goldPaint);
+                g.hline(canvas, x + 1, x + 2, y + 4, g.goldPaint);
+                g.px(canvas, x, y + 3, g.brownPaint);
+                break;
+            case FOOD_WATERMELON:
+                g.hline(canvas, x, x + 4, y + 1, g.redPaint);
+                g.hline(canvas, x, x + 4, y + 2, g.redPaint);
+                g.px(canvas, x + 1, y + 2, g.blackPaint);
+                g.px(canvas, x + 3, y + 2, g.blackPaint);
+                g.hline(canvas, x + 1, x + 3, y + 3, g.redPaint);
+                g.px(canvas, x, y + 3, g.capGreenPaint);
+                g.px(canvas, x + 4, y + 3, g.capGreenPaint);
+                g.hline(canvas, x + 1, x + 3, y + 4, g.capGreenPaint);
+                break;
+            case FOOD_COOKIE:
+                g.hline(canvas, x + 1, x + 3, y, g.conePaint);
+                g.rectPx(canvas, x, y + 1, x + 4, y + 3, g.conePaint);
+                g.hline(canvas, x + 1, x + 3, y + 4, g.conePaint);
+                g.px(canvas, x + 1, y + 1, g.woodPaint);
+                g.px(canvas, x + 3, y + 2, g.woodPaint);
+                g.px(canvas, x + 1, y + 3, g.woodPaint);
+                g.px(canvas, x + 3, y + 4, g.woodPaint);
+                break;
+            case FOOD_DONUT:
+                g.hline(canvas, x + 1, x + 3, y, g.pinkPaint);
+                g.hline(canvas, x, x + 4, y + 1, g.pinkPaint);
+                g.hline(canvas, x, x + 1, y + 2, g.pinkPaint);
+                g.hline(canvas, x + 3, x + 4, y + 2, g.pinkPaint);
+                g.hline(canvas, x, x + 4, y + 3, g.conePaint);
+                g.hline(canvas, x + 1, x + 3, y + 4, g.conePaint);
+                g.px(canvas, x + 1, y + 1, g.whitePaint);
+                g.px(canvas, x + 3, y + 1, g.cyanPaint);
+                g.px(canvas, x + 4, y + 2, g.goldPaint);
+                break;
+            case FOOD_ONIGIRI:
+                g.px(canvas, x + 2, y, g.whitePaint);
+                g.hline(canvas, x + 1, x + 3, y + 1, g.whitePaint);
+                g.rectPx(canvas, x, y + 2, x + 4, y + 4, g.whitePaint);
+                g.rectPx(canvas, x + 1, y + 3, x + 3, y + 4, g.capGreenDarkPaint);
+                break;
+            case FOOD_PIZZA:
+                g.hline(canvas, x, x + 4, y, g.conePaint);
+                g.hline(canvas, x, x + 4, y + 1, g.goldPaint);
+                g.rectPx(canvas, x + 1, y + 2, x + 3, y + 3, g.goldPaint);
+                g.px(canvas, x + 2, y + 4, g.goldPaint);
+                g.px(canvas, x + 1, y + 1, g.redPaint);
+                g.px(canvas, x + 3, y + 1, g.redPaint);
+                g.px(canvas, x + 2, y + 3, g.redPaint);
+                break;
+            case FOOD_BURGER:
+                g.hline(canvas, x + 1, x + 3, y, g.conePaint);
+                g.hline(canvas, x, x + 4, y + 1, g.conePaint);
+                g.px(canvas, x + 1, y + 1, g.whitePaint);
+                g.px(canvas, x + 3, y, g.whitePaint);
+                g.hline(canvas, x, x + 4, y + 2, g.capGreenPaint);
+                g.px(canvas, x + 2, y + 2, g.redPaint);
+                g.hline(canvas, x, x + 4, y + 3, g.brownPaint);
+                g.px(canvas, x + 4, y + 3, g.goldPaint);
+                g.hline(canvas, x, x + 4, y + 4, g.conePaint);
+                break;
+            case FOOD_CUPCAKE:
+                g.px(canvas, x + 2, y, g.redPaint);
+                g.hline(canvas, x + 1, x + 3, y + 1, g.blushPaint);
+                g.hline(canvas, x, x + 4, y + 2, g.blushPaint);
+                g.px(canvas, x + 1, y + 2, g.whitePaint);
+                g.px(canvas, x + 3, y + 1, g.cyanPaint);
+                g.rectPx(canvas, x + 1, y + 3, x + 3, y + 4, g.purplePaint);
+                g.px(canvas, x + 2, y + 3, g.lavenderPaint);
+                g.px(canvas, x + 2, y + 4, g.lavenderPaint);
+                break;
+            default:
+                drawApple(canvas, x, y);
+                break;
+        }
+    }
+
+    /**
+     * Comida mordida aos poucos pelo lado esquerdo (onde fica a boca).
+     *
+     * @param bites 0 = inteira, 1 e 2 = mordidas, 3 = só o último pedacinho
+     */
+    public void drawBittenFood(Canvas canvas, int x, int y, int food, int bites) {
+        if (food == FOOD_APPLE) {
+            drawBittenApple(canvas, x, y, bites);
+            return;
+        }
+        drawFood(canvas, x, y, food);
+        int depth = Math.min(3, bites);
+        for (int row = 0; row < 5 && depth > 0; row++) {
+            // Mordida arredondada: mais funda no meio do que nas pontas.
+            int inner = (row == 0 || row == 4) ? depth - 1 : depth;
+            for (int dx = 0; dx < inner; dx++) {
+                g.pxSolid(canvas, x + dx, y + row, g.blackPaint);
+            }
         }
     }
 
@@ -397,42 +541,6 @@ public final class PetAccessoryRenderer {
     }
 
     /** Estrelinhas fixas que piscam devagar (posições em volta do rosto). */
-    private static final int[][] STAR_SPOTS = {
-            {9, 10}, {16, 5}, {38, 7}, {44, 14}, {6, 19}, {47, 24}, {5, 33}, {45, 35},
-            {12, 42}, {40, 44}, {24, 3}, {31, 48}, {19, 47}, {35, 3},
-    };
-
-    /**
-     * Fundo sutil. Ele só anda quando a tela já está sendo redesenhada (não pede quadros a mais),
-     * então não muda o gasto de bateria.
-     */
-    public void drawBackground(Canvas canvas, int bg, long now) {
-        switch (bg) {
-            case BG_STARS:
-                for (int i = 0; i < STAR_SPOTS.length; i++) {
-                    boolean bright = ((now / 1000L) + i * 3L) % 7L == 0L;
-                    g.px(canvas, STAR_SPOTS[i][0], STAR_SPOTS[i][1], bright ? g.starBrightPaint : g.starDimPaint);
-                }
-                break;
-            case BG_RAIN:
-                for (int i = 0; i < 12; i++) {
-                    int x = 4 + (i * 17) % 44;
-                    int y = (int) ((i * 23L + now / 120L) % 56L) - 3;
-                    g.px(canvas, x, y, g.rainPaint);
-                    g.px(canvas, x, y + 1, g.rainPaint);
-                }
-                break;
-            case BG_SNOW:
-                for (int i = 0; i < 12; i++) {
-                    int y = (int) ((i * 19L + now / 600L) % 56L) - 3;
-                    int wiggle = (int) (((now / 1200L) + i) % 2L);
-                    g.px(canvas, 4 + (i * 13) % 44 + wiggle, y, g.snowPaint);
-                }
-                break;
-            default:
-                break;
-        }
-    }
 
     /** Envelopinho de mensagem (8x5) com coraçãozinho de lacre. */
     public void drawEnvelope(Canvas canvas, int x, int y) {

@@ -457,8 +457,9 @@ public final class PetEngine {
     private void feedPet(long now) {
         state.isSleeping = false;
         forcedMood = MOOD_NONE;
-        state.hunger = PetState.clamp(state.hunger + 28f);
-        state.happiness = PetState.clamp(state.happiness + 8f);
+        int food = state.equipped[CATEGORY_FOOD];
+        state.hunger = PetState.clamp(state.hunger + FOOD_HUNGER[food]);
+        state.happiness = PetState.clamp(state.happiness + FOOD_HAPPINESS[food]);
         state.coins += 5;
         state.mealsSincePoop++;
         if (state.mealsSincePoop >= 2 && state.poopCount < 3) {
@@ -467,7 +468,7 @@ public final class PetEngine {
         }
         startAction(MOOD_EATING, now, EAT_MS);
         mealFxStep = 0;
-        targetLookX = 2.5f; // olha a maçã chegando
+        targetLookX = 2.5f; // olha a comida chegando
         targetLookY = 0.5f;
         triggerBounce(-0.6f, 0.15f);
         hapticTick(20);
@@ -478,7 +479,7 @@ public final class PetEngine {
         state.isSleeping = false;
         forcedMood = MOOD_NONE;
         state.water = 100f;
-        state.happiness = PetState.clamp(state.happiness + 10f);
+        state.happiness = PetState.clamp(state.happiness + DRINK_HAPPINESS[state.equipped[CATEGORY_DRINK]]);
         state.coins += 8;
         startAction(MOOD_DRINKING, now, DRINK_MS);
         mealFxStep = 0;
@@ -547,6 +548,21 @@ public final class PetEngine {
         hapticTick(20);
     }
 
+    /** Lancheira: abre o seletor de comida ou de bebida (mesma tela da loja, só com ícones). */
+    private void openMealMenu(int category) {
+        shopOpen = true;
+        state.isSleeping = false;
+        forcedMood = MOOD_NONE;
+        shopCategory = category;
+        System.arraycopy(state.equipped, 0, shopPreview, 0, CATEGORY_COUNT);
+        triggerBounce(-0.6f, 0.15f);
+        hapticTick(20);
+    }
+
+    private boolean mealMenuOpen() {
+        return shopOpen && shopCategory >= SHOP_CATEGORY_COUNT;
+    }
+
     private void selectShopCategory(int category) {
         // Ao trocar de aba, a aba anterior volta a mostrar o que está equipado.
         shopPreview[shopCategory] = state.equipped[shopCategory];
@@ -570,6 +586,17 @@ public final class PetEngine {
     private void buyOrEquipPreviewItem(long now) {
         int category = shopCategory;
         int item = shopPreview[category];
+        if (category >= SHOP_CATEGORY_COUNT && state.isUnlocked(category, item)) {
+            // Lancheira: escolheu, fecha e ele come/bebe o que foi escolhido.
+            state.equipped[category] = item;
+            shopOpen = false;
+            if (category == CATEGORY_FOOD) {
+                feedPet(now);
+            } else {
+                giveWater(now);
+            }
+            return;
+        }
         if (state.isUnlocked(category, item)) {
             state.equipped[category] = item;
             startAction(MOOD_LOVED, now, 1400L);
@@ -688,8 +715,11 @@ public final class PetEngine {
             if (Math.abs(deg) < SHOP_BUY_HALF_DEG) {
                 buyOrEquipPreviewItem(now);
             } else {
-                int nearest = 0;
-                for (int c = 1; c < CATEGORY_COUNT; c++) {
+                // Loja: abas das roupinhas; lancheira: só comida e bebida.
+                boolean meal = shopCategory >= SHOP_CATEGORY_COUNT;
+                int nearest = meal ? SHOP_CATEGORY_COUNT : 0;
+                int end = meal ? CATEGORY_COUNT : SHOP_CATEGORY_COUNT;
+                for (int c = nearest + 1; c < end; c++) {
                     if (Math.abs(deg - SHOP_TAB_DEG[c]) < Math.abs(deg - SHOP_TAB_DEG[nearest])) {
                         nearest = c;
                     }
@@ -739,8 +769,8 @@ public final class PetEngine {
         if (actionIcon >= 0) {
             // Ícones em arco na borda de baixo.
             switch (actionIcon) {
-                case 0: feedPet(now); break;
-                case 1: giveWater(now); break;
+                case 0: openMealMenu(CATEGORY_FOOD); break;
+                case 1: openMealMenu(CATEGORY_DRINK); break;
                 case 2: lovePet(now); break;
                 case 3: toggleSleep(now); break;
                 default: toggleShop(); break;
@@ -851,9 +881,6 @@ public final class PetEngine {
             }
         }
 
-        // Fundo comprado na loja (bem apagadinho).
-        accessories.drawBackground(canvas, shownItem(CATEGORY_BG), now);
-
         // ---- Posição do rosto (só rosto, sem corpo)
         int breathe = (mood == MOOD_SLEEPING || (now / IDLE_FRAME_MS) % 2L != 0L) ? 1 : 0;
         int sway = shopOpen ? 0 : clampInt(Math.round(lookX * 0.4f), -1, 1);
@@ -901,7 +928,15 @@ public final class PetEngine {
             accessories.drawHeadItem(canvas, cx, eyeY, headItem, now);
             // Coisa na mãozinha (guarda enquanto come, bebe ou toma banho).
             boolean handsBusy = mood == MOOD_EATING || mood == MOOD_DRINKING || mood == MOOD_SHOWERING;
-            if (!handsBusy) {
+            if (mealMenuOpen()) {
+                // Lancheira: mostra ao lado da boca a comida/bebida escolhida (balança 1x por segundo).
+                int bob = (int) ((now / 1000L) % 2L);
+                if (shopCategory == CATEGORY_FOOD) {
+                    accessories.drawFood(canvas, cx + 10, mouthY - 1 - bob, shopPreview[CATEGORY_FOOD]);
+                } else {
+                    accessories.drawDrinkCup(canvas, cx + 10, mouthY - 2 - bob, 4, shopPreview[CATEGORY_DRINK]);
+                }
+            } else if (!handsBusy) {
                 accessories.drawHoldItem(canvas, cx + 12, mouthY, shownItem(CATEGORY_HOLD), facePaint, now);
             }
             drawMealProps(canvas, mood, cx, mouthY, now);
@@ -1458,12 +1493,13 @@ public final class PetEngine {
             int ay = mouthY - 3;
             if (t < EAT_ARRIVE_MS) {
                 float rest = 1f - easeOut(t / (float) EAT_ARRIVE_MS);
-                accessories.drawApple(canvas, Math.round(ax + 14 * rest), Math.round(ay - 7 * rest));
+                accessories.drawFood(canvas, Math.round(ax + 14 * rest), Math.round(ay - 7 * rest),
+                        state.equipped[CATEGORY_FOOD]);
             } else if (t < EAT_CHEW_END_MS) {
                 long into = t - EAT_ARRIVE_MS;
                 int bites = (int) Math.min(3L, (into + EAT_BITE_MS - 140L) / EAT_BITE_MS);
                 boolean pushing = into % EAT_BITE_MS < 140L;
-                accessories.drawBittenApple(canvas, pushing ? ax - 1 : ax, ay, bites);
+                accessories.drawBittenFood(canvas, pushing ? ax - 1 : ax, ay, state.equipped[CATEGORY_FOOD], bites);
                 if (bites > mealFxStep) {
                     mealFxStep = bites;
                     // Farelinhos caindo e um "nhac" na vibração.
@@ -1512,8 +1548,9 @@ public final class PetEngine {
                 }
             }
             level = Math.max(0, level);
-            accessories.drawWaterCup(canvas, cupX, cupY, level);
-            // Bolhinhas subindo na água.
+            int drink = state.equipped[CATEGORY_DRINK];
+            accessories.drawDrinkCup(canvas, cupX, cupY, level, drink);
+            // Bolhinhas subindo na bebida.
             if (level > 0 && t >= DRINK_ARRIVE_MS) {
                 int rise = (int) ((t / 140L) % level);
                 grid.px(canvas, cupX + 2 + (int) ((t / 280L) % 2L), cupY + 4 - rise, grid.whitePaint);
@@ -1532,7 +1569,8 @@ public final class PetEngine {
                 // Golinho subindo pelo canudo até a boca.
                 if (level > 0 && t >= DRINK_ARRIVE_MS) {
                     int idx = path.length - 1 - (int) ((t / 60L) % path.length);
-                    grid.px(canvas, path[idx][0], path[idx][1], grid.cyanPaint);
+                    grid.px(canvas, path[idx][0], path[idx][1],
+                            drink == DRINK_WATER ? grid.cyanPaint : accessories.drinkPaint(drink));
                 }
             }
         }
@@ -1627,8 +1665,10 @@ public final class PetEngine {
 
         // Botão de baixo: preço (comprar) ou check (verde = já está usando, ciano = é seu, toque p/ usar).
         int item = shopPreview[shopCategory];
+        boolean meal = shopCategory >= SHOP_CATEGORY_COUNT;
         if (state.isUnlocked(shopCategory, item)) {
-            Paint check = state.equipped[shopCategory] == item ? grid.greenPaint : grid.cyanPaint;
+            // Na lancheira o check é sempre verde: tocar dá a comida/bebida para ele.
+            Paint check = meal || state.equipped[shopCategory] == item ? grid.greenPaint : grid.cyanPaint;
             grid.px(canvas, 22, 48, check);
             grid.px(canvas, 23, 49, check);
             grid.px(canvas, 24, 50, check);
@@ -1658,17 +1698,22 @@ public final class PetEngine {
         grid.px(canvas, 46, 23, grid.whitePaint);
         grid.px(canvas, 46, 27, grid.whitePaint);
 
-        // Abas em arco acompanhando a borda: cabeça | nariz | olhos (esquerda), pescoço | cor | fundo (direita).
+        if (meal) {
+            // Lancheira: só duas abas, comida (esquerda) e bebida (direita).
+            drawShopTab(canvas, SPRITE_TAB_FOOD, CATEGORY_FOOD, grid.redPaint);
+            drawShopTab(canvas, SPRITE_TAB_DRINK, CATEGORY_DRINK, grid.cyanPaint);
+            return;
+        }
+        // Abas em arco acompanhando a borda: cabeça | nariz | olhos (esquerda), pescoço | segurar (direita).
         drawShopTab(canvas, SPRITE_TAB_HAT, CATEGORY_HEAD, grid.goldPaint);
         drawShopTab(canvas, SPRITE_TAB_NOSE, CATEGORY_NOSE, grid.clownRedPaint);
         drawShopTab(canvas, SPRITE_TAB_EYE, CATEGORY_EYES, grid.cyanPaint);
         drawShopTab(canvas, SPRITE_TAB_NECK, CATEGORY_NECK, grid.redPaint);
         drawShopTab(canvas, SPRITE_TAB_HOLD, CATEGORY_HOLD, grid.goldPaint);
-        drawShopTab(canvas, SPRITE_TAB_BG, CATEGORY_BG, grid.lavenderPaint);
     }
 
     /** Ângulo de cada aba no arco de baixo (0 = embaixo; negativo = esquerda). */
-    private static final double[] SHOP_TAB_DEG = {-70, -50, -30, 30, 50, 70};
+    private static final double[] SHOP_TAB_DEG = {-70, -50, -30, 36, 62, -42, 42};
     private static final double SHOP_TAB_RADIUS = 22.0;
     /** Faixa do meio de baixo que é o botão de comprar/usar. */
     private static final double SHOP_BUY_HALF_DEG = 18.0;
@@ -1709,10 +1754,10 @@ public final class PetEngine {
             int y = (int) Math.round(GRID_SIZE / 2.0 + ACTION_ICON_RADIUS * Math.cos(angle) - 2.5);
             switch (i) {
                 case 0:
-                    accessories.drawApple(canvas, x, y);
+                    accessories.drawFood(canvas, x, y, state.equipped[CATEGORY_FOOD]);
                     break;
                 case 1:
-                    accessories.drawWaterCup(canvas, x, y - 1, 3);
+                    accessories.drawDrinkCup(canvas, x, y - 1, 3, state.equipped[CATEGORY_DRINK]);
                     break;
                 case 2:
                     grid.drawSprite5x5(canvas, x, y, SPRITE_HEART, grid.pinkPaint);

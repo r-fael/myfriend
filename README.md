@@ -30,7 +30,8 @@ Bichinho virtual retrô desenhado numa grade LCD `52x52` para **Wear OS (Galaxy 
 - **Reage a você:** fica animado quando você caminha, comemora a meta de 6000 passos (+100 moedas), fica tonto se o pulso chacoalhar e segura um envelopinho quando chega mensagem.
 - **Personalidade:** cada dia sorteia um humor — normal, preguiçoso, elétrico ou carente.
 - **Sentimentos:** fica bravo se for cutucado demais (e a birra aumenta se continuar), triste sem carinho ou com cocô acumulado, e emburrado de costas se ficar 3h+ sem você olhar.
-- **Loja:** 6 categorias — chapéus (inclui orelhas de gatinho e boné de hélice que gira), nariz, olhos, pescoço (gravatinha, cachecol, chupeta, colar), coisas para segurar (flor, espada, poção, varinha, balão, pirulito, sorvete, microfone, guarda-chuva) e fundo (estrelas, chuva, neve).
+- **Loja:** 5 categorias — chapéus (inclui orelhas de gatinho e boné de hélice que gira), nariz, olhos, pescoço (gravatinha, cachecol, chupeta, colar), coisas para segurar (flor, espada, poção, varinha, balão, pirulito, sorvete, microfone, guarda-chuva).
+- **Lancheira:** tocar na comida ou no copo abre o cardápio (só ícones, sem texto). Maçã e água são grátis; dá para comprar banana, melancia, biscoito, rosquinha, bolinho de arroz, pizza, hambúrguer e cupcake, e suco, leite, refrigerante, milk-shake e chá com bolinhas. Comprou uma vez, é seu para sempre.
 - **Watch Face:** relógio, data, anel de bateria na borda e modo tela desligada em cinza que muda só uma vez por minuto.
 - **Backup:** moedas, itens e status entram no backup do relógio.
 
@@ -66,7 +67,7 @@ Mouse = toque, rodinha = coroa, **M / Shift+M** = mostrar cada humor, S/G = pass
 - **`PetConfig.java`** — balanceamento, decaimento, preços, itens, humores e horários.
 - **`PetState.java`** — persistência em `SharedPreferences` e decaimento exato com a tela apagada (acordado e dormindo).
 - **`PixelGrid.java`** — grade `52x52` adaptável à resolução, paleta pré-alocada, fontes `3x5`, sprites `5x5`.
-- **`PetAccessoryRenderer.java`** — acessórios da loja, fundos, objetos (maçã, copo, envelope), relógio e anel de bateria.
+- **`PetAccessoryRenderer.java`** — acessórios da loja, comidas e bebidas, objetos (envelope), relógio e anel de bateria.
 - **`PetEngine.java`** — motor: simulação, humores, rotina do dia, física (olhar, piscar, pulo), partículas, entrada e agendamento de quadros para economizar bateria.
 - **`PetClock.java` / `PetSignals.java`** — hora (com deslocamento para o simulador) e sinais vindos de fora (notificações).
 - **`PetSensors.java`** — contador de passos e detecção de chacoalhar, só com a tela acesa.

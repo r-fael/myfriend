@@ -59,8 +59,12 @@ public final class PetConfig {
     public static final int CATEGORY_EYES = 2;
     public static final int CATEGORY_NECK = 3;
     public static final int CATEGORY_HOLD = 4;
-    public static final int CATEGORY_BG = 5;
-    public static final int CATEGORY_COUNT = 6;
+    /** Lancheira: comidas e bebidas (item 0 = maçã / água, que já vêm liberadas). */
+    public static final int CATEGORY_FOOD = 5;
+    public static final int CATEGORY_DRINK = 6;
+    public static final int CATEGORY_COUNT = 7;
+    /** As primeiras categorias são as da loja de roupinhas; as outras ficam na lancheira. */
+    public static final int SHOP_CATEGORY_COUNT = 5;
 
     /** Item 0 de toda categoria é "nada equipado". */
     public static final int ITEM_NONE = 0;
@@ -124,10 +128,31 @@ public final class PetConfig {
     /** Cores do rostinho (removidas na v1.14): preço para devolver as moedas de quem comprou. */
     public static final int[] REMOVED_COLOR_PRICES = {0, 40, 40, 60};
 
-    // Fundo (0 = preto)
-    public static final int BG_STARS = 1;
-    public static final int BG_RAIN = 2;
-    public static final int BG_SNOW = 3;
+    /** Fundos animados (removidos na v1.15): preço para devolver as moedas de quem comprou. */
+    public static final int[] REMOVED_BG_PRICES = {0, 30, 30, 30};
+
+    // Comidas (0 = maçã, grátis)
+    public static final int FOOD_APPLE = 0;
+    public static final int FOOD_BANANA = 1;
+    public static final int FOOD_WATERMELON = 2;
+    public static final int FOOD_COOKIE = 3;
+    public static final int FOOD_DONUT = 4;
+    public static final int FOOD_ONIGIRI = 5;
+    public static final int FOOD_PIZZA = 6;
+    public static final int FOOD_BURGER = 7;
+    public static final int FOOD_CUPCAKE = 8;
+    /** Quanto cada comida mata a fome e quanto deixa feliz (lanche enche mais, doce alegra mais). */
+    public static final float[] FOOD_HUNGER = {28f, 26f, 24f, 22f, 28f, 34f, 38f, 45f, 30f};
+    public static final float[] FOOD_HAPPINESS = {8f, 9f, 10f, 14f, 16f, 10f, 14f, 14f, 22f};
+
+    // Bebidas (0 = água, grátis). Todas enchem a sede; as compradas alegram mais.
+    public static final int DRINK_WATER = 0;
+    public static final int DRINK_JUICE = 1;
+    public static final int DRINK_MILK = 2;
+    public static final int DRINK_SODA = 3;
+    public static final int DRINK_SHAKE = 4;
+    public static final int DRINK_BUBBLE_TEA = 5;
+    public static final float[] DRINK_HAPPINESS = {10f, 14f, 14f, 18f, 22f, 24f};
 
     /** Preço de cada item, por categoria (índice = id do item). */
     public static final int[][] ITEM_PRICES = {
@@ -186,11 +211,24 @@ public final class PetConfig {
                     40, // microfone
                     45, // guarda-chuva
             },
-            { // fundo
-                    0,  // preto
-                    30, // estrelinhas
-                    30, // chuva
-                    30, // neve
+            { // comidas
+                    0,  // maçã
+                    15, // banana
+                    20, // melancia
+                    20, // biscoito
+                    30, // rosquinha
+                    30, // bolinho de arroz
+                    35, // pizza
+                    40, // hambúrguer
+                    45, // cupcake
+            },
+            { // bebidas
+                    0,  // água
+                    15, // suco de laranja
+                    20, // leite
+                    25, // refrigerante
+                    35, // milk-shake de morango
+                    40, // chá com bolinhas
             },
     };
 

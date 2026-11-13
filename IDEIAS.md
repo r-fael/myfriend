@@ -14,15 +14,20 @@ Lista de melhorias futuras. Marque com `[x]` o que for feito.
 
 ## Motivos pra voltar nele
 
-- [ ] **Minijogo na coroa**: girar a coroa para pegar frutinhas que caem, valendo moedas (hoje as moedas só vêm do carinho).
-- [ ] **Conquistas**: 7 dias seguidos cuidando, 10 mil passos, comprou tudo de uma categoria... cada uma libera um item exclusivo.
-- [ ] **Itens sazonais**: gorro de Natal e abóbora só aparecem na loja na época certa.
+- [ ] **Lembretes de saúde**: avisar de beber água e de levantar depois de 1 h sentado.
+- [ ] **Cartão para compartilhar**: imagem do bichinho com a roupinha, pronta para postar.
+- [ ] **Primeira impressão**: tutorial rapidinho só com ícones.
+- [ ] **Qualidade**: testes automáticos do motor e teste em telas de outros tamanhos.
+
+Descartadas (não combinam com o que queremos): sequência de dias e crescimento, passeio com hora
+marcada, minijogo da coroa, comida paga a cada refeição, itens sazonais e item raro do dia.
 
 ## Loja
 
 - [x] **Nova categoria "boca/pescoço"**: gravatinha, cachecol, chupeta, colar.
 - [x] **Coisas para segurar** (substituiu a cor do bichinho): flor, espada, poção borbulhando, varinha, balão, pirulito, sorvete, microfone e guarda-chuva.
-- [x] **Fundo**: estrelinhas, chuva ou neve bem sutis atrás dele.
+- [x] ~~**Fundo**: estrelinhas, chuva ou neve bem sutis atrás dele.~~ (feito e retirado na 1.15)
+- [x] **Lancheira** (1.15): escolher a comida e a bebida, comprando novas com moedas. Sem nenhuma letra na tela.
 
 ## Watchface
 
@@ -31,9 +36,7 @@ Lista de melhorias futuras. Marque com `[x]` o que for feito.
 
 ## Novas ideias
 
-- [ ] **Comida com preço**: comer e beber custam moedas, fechando o ciclo ganhar/gastar junto com o minijogo.
 - [ ] **Ficar doente**: se ficar muito tempo zerado, fica verdinho com termômetro e precisa de remédio da loja.
-- [ ] **Crescer com o tempo**: filhote → adulto depois de X dias bem cuidado, com contador de dias juntos.
 - [ ] **Esconde-esconde**: às vezes ele some atrás da borda e você toca onde aparece um pedacinho dele.
 - [ ] **Reação ao carregador**: ao pôr o relógio pra carregar, ele toma um "suquinho de energia" e fica feliz.
 - [ ] **Banho de espuma**: o banho vira minijogo de esfregar com o dedo, com bolhas.
@@ -42,10 +45,10 @@ Lista de melhorias futuras. Marque com `[x]` o que for feito.
 
 ## Prioridade sugerida
 
-1. Minijogo da coroa + comida com preço (ciclo de moedas).
-2. Conquistas.
-3. Itens sazonais.
-4. Clima (o único que precisa de internet).
+1. Publicação na loja (formato aceito pela Play Store, chave de assinatura, política de privacidade).
+2. Lembretes de saúde (beber água, levantar).
+3. Cartão para compartilhar e tutorial.
+4. Testes automáticos.
 
 ## Feito na 1.13 (além dos marcados acima)
 

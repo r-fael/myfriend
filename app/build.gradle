@@ -2,16 +2,34 @@ plugins {
     id 'com.android.application'
 }
 
+// Chave fixa de assinatura: lida do keystore.properties (fora do git, criado pelo criar-chave.bat).
+def keystoreFile = rootProject.file('keystore.properties')
+def keystoreProps = new Properties()
+if (keystoreFile.exists()) {
+    keystoreFile.withInputStream { keystoreProps.load(it) }
+}
+
 android {
     namespace 'com.myfriend'
+
+    signingConfigs {
+        if (keystoreFile.exists()) {
+            upload {
+                storeFile rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
     compileSdk 34
 
     defaultConfig {
         applicationId 'com.myfriend'
         minSdk 30
         targetSdk 34
-        versionCode 14
-        versionName '1.14.0'
+        versionCode 15
+        versionName '1.15.0'
     }
 
     buildTypes {
@@ -20,8 +38,8 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            // Assina com a chave de debug para poder instalar direto no relógio.
-            signingConfig signingConfigs.debug
+            // Usa a chave fixa se existir; sem ela cai na de debug (que muda de PC para PC).
+            signingConfig keystoreFile.exists() ? signingConfigs.upload : signingConfigs.debug
             vcsInfo.include false
         }
     }
