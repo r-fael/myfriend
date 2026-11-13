@@ -926,8 +926,9 @@ public final class PetEngine {
             accessories.drawNoseItem(canvas, cx, eyeY, shownItem(CATEGORY_NOSE));
             accessories.drawEyesItem(canvas, lx, rx, eyeY, cx, shownItem(CATEGORY_EYES));
             accessories.drawHeadItem(canvas, cx, eyeY, headItem, now);
-            // Coisa na mãozinha (guarda enquanto come, bebe ou toma banho).
-            boolean handsBusy = mood == MOOD_EATING || mood == MOOD_DRINKING || mood == MOOD_SHOWERING;
+            // Coisa na mãozinha (guarda enquanto come, bebe, toma banho ou dorme).
+            boolean handsBusy = mood == MOOD_EATING || mood == MOOD_DRINKING || mood == MOOD_SHOWERING
+                    || mood == MOOD_SLEEPING;
             if (mealMenuOpen()) {
                 // Lancheira: mostra ao lado da boca a comida/bebida escolhida (balança 1x por segundo).
                 int bob = (int) ((now / 1000L) % 2L);
@@ -970,10 +971,15 @@ public final class PetEngine {
                 || Math.abs(squash) > 0.02f
                 || Math.abs(zoomTarget - faceZoom) > 0f
                 || Math.abs(targetLookX - lookX) > 0.15f
-                || Math.abs(targetLookY - lookY) > 0.15f
-                || isActionRunning(now);
+                || Math.abs(targetLookY - lookY) > 0.15f;
         if (moving) {
             return 16L;
+        }
+        if (isActionRunning(now)) {
+            // Ação sem nada "voando" (pulo, zoom, olhar): pixel art não precisa de 60 fps.
+            // Comer/beber têm objetos deslizando (30 fps); o resto troca de pose a cada 110 ms ou mais (20 fps).
+            long step = (actionMood == MOOD_EATING || actionMood == MOOD_DRINKING) ? 33L : 50L;
+            return Math.max(16L, Math.min(step, actionMoodUntil - now));
         }
         if (particles == PARTICLES_MOVING) {
             return 90L;
@@ -1479,6 +1485,11 @@ public final class PetEngine {
     private static final long DRINK_ARRIVE_MS = 400L;
     private static final long DRINK_SIP_END_MS = 2100L;
 
+    /** Canudinho: deslocamentos {dx, dy} a partir do centro da boca (fixo, para não alocar a cada quadro). */
+    private static final int[][] STRAW_PATH = {
+            {3, 1}, {4, 0}, {4, -1}, {5, -2}, {6, -1}, {6, 0}, {6, 1}, {6, 2},
+    };
+
     /** Desacelera no fim (chega devagarinho). */
     private static float easeOut(float p) {
         float q = 1f - Math.max(0f, Math.min(1f, p));
@@ -1558,18 +1569,15 @@ public final class PetEngine {
             if (straw) {
                 // Canudinho listrado saindo da boca, passando pela borda e entrando na água.
                 int off = cupX - baseX;
-                int[][] path = {
-                        {cx + 3, mouthY + 1}, {cx + 4, mouthY}, {cx + 4, mouthY - 1}, {cx + 5, mouthY - 2},
-                        {cx + 6, mouthY - 1}, {cx + 6, mouthY}, {cx + 6, mouthY + 1}, {cx + 6, mouthY + 2},
-                };
+                int[][] path = STRAW_PATH;
                 for (int i = 0; i < path.length; i++) {
-                    grid.px(canvas, path[i][0] + off, path[i][1],
+                    grid.px(canvas, cx + path[i][0] + off, mouthY + path[i][1],
                             (i & 1) == 0 ? grid.pinkPaint : grid.whitePaint);
                 }
                 // Golinho subindo pelo canudo até a boca.
                 if (level > 0 && t >= DRINK_ARRIVE_MS) {
                     int idx = path.length - 1 - (int) ((t / 60L) % path.length);
-                    grid.px(canvas, path[idx][0], path[idx][1],
+                    grid.px(canvas, cx + path[idx][0], mouthY + path[idx][1],
                             drink == DRINK_WATER ? grid.cyanPaint : accessories.drinkPaint(drink));
                 }
             }

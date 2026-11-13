@@ -216,6 +216,18 @@ public final class PetState {
         energy = clamp(energy - ENERGY_DECAY_PER_HOUR * hours);
     }
 
+    /**
+     * Em quantas horas (acordado) a fome ou a sede chegam no ponto de pedir cuidado.
+     * Usado pelo lembrete em segundo plano para acordar o relógio só quando faz sentido.
+     *
+     * @return 0 se alguma já passou do limite
+     */
+    public static float hoursUntilNeedsCare(float hunger, float water) {
+        float hungerHours = (hunger - HUNGRY_THRESHOLD) / HUNGER_DECAY_PER_HOUR;
+        float waterHours = (water - THIRSTY_THRESHOLD) / WATER_DECAY_PER_HOUR;
+        return Math.max(0f, Math.min(hungerHours, waterHours));
+    }
+
     public boolean isUnlocked(int category, int item) {
         return ((unlocked[category] >> item) & 1) != 0;
     }

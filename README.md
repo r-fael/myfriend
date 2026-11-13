@@ -1,6 +1,6 @@
 # My Friend — Virtual Pet & Watch Face (Wear OS / Galaxy Watch)
 
-Bichinho virtual retrô desenhado numa grade LCD `52x52` para **Wear OS (Galaxy Watch)**. Funciona como aplicativo e como **Watch Face** interativa, escrito 100% em Java puro (zero dependências externas, APK de ~37 KB) e pensado para gastar o mínimo de bateria.
+Bichinho virtual retrô desenhado numa grade LCD `52x52` para **Wear OS (Galaxy Watch)**. Funciona como aplicativo e como **Watch Face** interativa, escrito 100% em Java puro (zero dependências externas, APK de ~40 KB) e pensado para gastar o mínimo de bateria.
 
 <table>
   <tr>
@@ -62,7 +62,13 @@ desktop-sim/run.bat
 
 Mouse = toque, rodinha = coroa, **M / Shift+M** = mostrar cada humor, S/G = passos, D = chacoalhar, N = mensagem, H = +1 hora, U = +1 dia, A = tela desligada, setas = bateria, C = carregador.
 
-## Arquitetura (`v1.13.0`)
+## Arquitetura (`v1.16.0`)
+
+A explicação completa, do pixel ao relógio, está em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
+A versão desenhada é o [`docs/como-funciona.excalidraw`](docs/como-funciona.excalidraw)
+(abra em <https://excalidraw.com>), com uma cópia em imagem em [`docs/como-funciona.png`](docs/como-funciona.png).
+
+Resumo dos arquivos:
 
 - **`PetConfig.java`** — balanceamento, decaimento, preços, itens, humores e horários.
 - **`PetState.java`** — persistência em `SharedPreferences` e decaimento exato com a tela apagada (acordado e dormindo).
@@ -80,6 +86,13 @@ Mouse = toque, rodinha = coroa, **M / Shift+M** = mostrar cada humor, S/G = pass
 Ideias futuras ficam em [`IDEIAS.md`](IDEIAS.md).
 
 ## Compilação e instalação via ADB (Wi-Fi)
+
+No Windows, o jeito curto é `instalar.bat`: ele compila, acha o relógio no Wi-Fi (última porta
+usada ou descoberta automática) e instala por cima. `instalar.bat -Mostrador` também abre o
+seletor de mostrador. Para as atualizações entrarem por cima a partir de qualquer PC, rode
+`criar-chave.bat` uma vez: ele cria a chave fixa de assinatura (fora do git).
+
+Passo a passo manual:
 
 ```bash
 # 1. Compilar o APK de release (R8, assinado para instalação direta)

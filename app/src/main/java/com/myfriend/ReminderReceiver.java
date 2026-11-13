@@ -14,8 +14,11 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 
 /**
- * A cada 30 minutos (só de dia) confere o bichinho mesmo com o app fechado: se ele estiver com fome,
- * sede ou a bateria do relógio estiver baixa, vibra e abre o app.
+ * Confere o bichinho mesmo com o app fechado (só de dia): se ele estiver com fome, sede ou a
+ * bateria do relógio estiver baixa, vibra e abre o app.
+ *
+ * <p>Para acordar o relógio o mínimo possível, a próxima conferida é marcada para quando a fome
+ * ou a sede devem chegar no limite (entre 30 min e 2 h), em vez de a cada 30 min fixos.
  *
  * <p>Respeita o modo dormindo ({@code isSleeping}) e aplica intervalo mínimo entre alertas
  * de fome/sede para não drenar bateria nem incomodar à noite.
@@ -25,6 +28,9 @@ public class ReminderReceiver extends BroadcastReceiver {
     public static final String ACTION_CHECK_PET = "com.myfriend.ACTION_CHECK_PET";
 
     private static final long CHECK_INTERVAL_MS = 30 * 60 * 1000L;
+    private static final long MAX_CHECK_INTERVAL_MS = 2 * 60 * 60 * 1000L;
+    /** Com a bateria nessa faixa volta a conferir de 30 em 30 min, para não perder os avisos de 30% e 15%. */
+    private static final int BATTERY_WATCH_PCT = 45;
     private static final long PET_ALERT_COOLDOWN_MS = 60 * 60 * 1000L;
     private static final int REQUEST_CODE = 1001;
 
@@ -46,19 +52,49 @@ public class ReminderReceiver extends BroadcastReceiver {
         PendingIntent pending = PendingIntent.getBroadcast(context, REQUEST_CODE, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         alarmManager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                SystemClock.elapsedRealtime() + nextCheckDelayMs(), pending);
+                SystemClock.elapsedRealtime() + nextCheckDelayMs(baseDelayMs(context)), pending);
+    }
+
+    /** Fome e sede estimadas agora: {@code [0]} fome, {@code [1]} água (o app pode estar fechado há horas). */
+    private static float[] estimateNeeds(SharedPreferences prefs, long nowWall) {
+        float hoursAway = Math.max(0f,
+                (nowWall - prefs.getLong("savedTime", nowWall)) / 3_600_000f);
+        return new float[]{
+                Math.max(0f, prefs.getFloat("hunger", 85f) - HUNGER_DECAY_PER_HOUR * hoursAway),
+                Math.max(0f, prefs.getFloat("water", 80f) - WATER_DECAY_PER_HOUR * hoursAway),
+        };
+    }
+
+    /** Quanto esperar até a próxima conferida, olhando quando ele vai precisar de cuidado. */
+    private static long baseDelayMs(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        long nowWall = System.currentTimeMillis();
+        float[] needs = estimateNeeds(prefs, nowWall);
+        long untilCare = (long) (PetState.hoursUntilNeedsCare(needs[0], needs[1]) * 3_600_000f);
+        if (untilCare <= 0L) {
+            // Já está pedindo cuidado: o próximo aviso só sai depois do intervalo mínimo entre alertas.
+            untilCare = prefs.getLong(KEY_LAST_PET_ALERT, 0L) + PET_ALERT_COOLDOWN_MS - nowWall;
+        }
+        long max = MAX_CHECK_INTERVAL_MS;
+        BatteryManager batteryManager = (BatteryManager) context.getSystemService(Context.BATTERY_SERVICE);
+        if (batteryManager != null && !batteryManager.isCharging()
+                && batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) <= BATTERY_WATCH_PCT) {
+            max = CHECK_INTERVAL_MS;
+        }
+        // +1 min de folga para a conferida cair logo depois de ele passar do limite.
+        return Math.max(CHECK_INTERVAL_MS, Math.min(max, untilCare + 60_000L));
     }
 
     private static boolean isNightHour(int hour) {
         return hour >= NIGHT_START_HOUR || hour < MORNING_HOUR;
     }
 
-    /** De dia, a cada 30 min; de noite o relógio não acorda: a próxima conferida é às 7h. */
-    private static long nextCheckDelayMs() {
+    /** De dia, espera {@code baseMs}; de noite o relógio não acorda: a próxima conferida é às 7h. */
+    private static long nextCheckDelayMs(long baseMs) {
         java.util.Calendar next = java.util.Calendar.getInstance();
-        next.add(java.util.Calendar.MILLISECOND, (int) CHECK_INTERVAL_MS);
+        next.add(java.util.Calendar.MILLISECOND, (int) baseMs);
         if (!isNightHour(next.get(java.util.Calendar.HOUR_OF_DAY))) {
-            return CHECK_INTERVAL_MS;
+            return baseMs;
         }
         if (next.get(java.util.Calendar.HOUR_OF_DAY) >= NIGHT_START_HOUR) {
             next.add(java.util.Calendar.DAY_OF_MONTH, 1);
@@ -72,14 +108,11 @@ public class ReminderReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        scheduleNextAlarm(context);
-
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         long nowWall = System.currentTimeMillis();
-        float hoursAway = Math.max(0f,
-                (nowWall - prefs.getLong("savedTime", nowWall)) / 3_600_000f);
-        float hunger = Math.max(0f, prefs.getFloat("hunger", 85f) - HUNGER_DECAY_PER_HOUR * hoursAway);
-        float water = Math.max(0f, prefs.getFloat("water", 80f) - WATER_DECAY_PER_HOUR * hoursAway);
+        float[] needs = estimateNeeds(prefs, nowWall);
+        float hunger = needs[0];
+        float water = needs[1];
         boolean isSleeping = prefs.getBoolean("isSleeping", false)
                 || isNightHour(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY));
 
@@ -120,6 +153,8 @@ public class ReminderReceiver extends BroadcastReceiver {
                 .putBoolean(KEY_NOTIFIED_BAT_15, notified15)
                 .putLong(KEY_LAST_PET_ALERT, lastPetAlert)
                 .apply();
+        // Marca a próxima conferida já sabendo se acabou de avisar.
+        scheduleNextAlarm(context);
 
         if (pattern == null) {
             return;

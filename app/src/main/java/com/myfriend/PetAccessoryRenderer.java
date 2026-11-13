@@ -27,7 +27,19 @@ public final class PetAccessoryRenderer {
             {0, -11, -10},
     };
 
+    // Formatos fixos (ficam aqui para o desenho não alocar nada a cada quadro).
+    private static final int[] SULK_HEAD_WIDTHS = {4, 6, 7, 8, 8, 8, 8, 8, 7, 6, 4};
+    private static final int[] BIRTHDAY_HAT_WIDTHS = {4, 4, 3, 3, 2, 2, 1, 1};
+    private static final int[][] CAT_EAR = {{-9, -3}, {-9, -4}, {-8, -4}, {-8, -5}, {-7, -5}, {-7, -6}, {-7, -7}};
+    private static final int[] PROPELLER_CAP_WIDTHS = {8, 7, 7, 6, 4};
+
     private final PixelGrid g;
+    private final Paint[] birthdayStripes;
+    private final Paint[] propellerSlices;
+    /** Data já calculada (o Calendar só é criado quando o minuto muda). */
+    private long dateMinute = -1L;
+    private int dateDay = 1;
+    private int dateMonth = 1;
     private final TimeZone localTz = TimeZone.getDefault();
 
     /** Pixels do anel de bateria na borda (x, y), em ordem horária a partir do topo. */
@@ -35,6 +47,8 @@ public final class PetAccessoryRenderer {
 
     public PetAccessoryRenderer(PixelGrid grid) {
         this.g = grid;
+        this.birthdayStripes = new Paint[]{grid.cyanPaint, grid.pinkPaint, grid.goldPaint};
+        this.propellerSlices = new Paint[]{grid.capRedPaint, grid.goldPaint, grid.deepBluePaint, grid.capGreenPaint};
     }
 
     private static int[][] buildRing() {
@@ -88,9 +102,15 @@ public final class PetAccessoryRenderer {
 
     /** Data DD/MM no mesmo lugar do relógio. */
     public void drawDateDDMM(Canvas canvas, int y, Paint paint) {
-        java.util.Calendar cal = PetClock.calendar();
-        int day = cal.get(java.util.Calendar.DAY_OF_MONTH);
-        int month = cal.get(java.util.Calendar.MONTH) + 1;
+        long minute = PetClock.wallMillis() / 60_000L;
+        if (minute != dateMinute) {
+            dateMinute = minute;
+            java.util.Calendar cal = PetClock.calendar();
+            dateDay = cal.get(java.util.Calendar.DAY_OF_MONTH);
+            dateMonth = cal.get(java.util.Calendar.MONTH) + 1;
+        }
+        int day = dateDay;
+        int month = dateMonth;
         g.drawDigit3x5(canvas, 16, y, day / 10, paint);
         g.drawDigit3x5(canvas, 20, y, day % 10, paint);
         g.px(canvas, 26, y, g.cyanPaint);
@@ -559,7 +579,7 @@ public final class PetAccessoryRenderer {
 
     /** Ele de costas, emburrado: nuca, redemoinho no cabelo e a marquinha de bravo piscando. */
     public void drawSulkBack(Canvas canvas, int cx, int eyeY, long now) {
-        int[] halfWidths = {4, 6, 7, 8, 8, 8, 8, 8, 7, 6, 4};
+        int[] halfWidths = SULK_HEAD_WIDTHS;
         for (int i = 0; i < halfWidths.length; i++) {
             band(canvas, cx, halfWidths[i], eyeY - 5 + i, g.backHeadPaint);
         }
@@ -840,8 +860,8 @@ public final class PetAccessoryRenderer {
 
             case HEAD_BIRTHDAY_HAT:
                 // Chapéu de festa alto e listrado.
-                Paint[] stripes = {g.cyanPaint, g.pinkPaint, g.goldPaint};
-                int[] halfWidths = {4, 4, 3, 3, 2, 2, 1, 1};
+                Paint[] stripes = birthdayStripes;
+                int[] halfWidths = BIRTHDAY_HAT_WIDTHS;
                 for (int i = 0; i < halfWidths.length; i++) {
                     band(canvas, cx, halfWidths[i], base - i, stripes[i % 3]);
                 }
@@ -887,7 +907,7 @@ public final class PetAccessoryRenderer {
                 // Orelhas de gato de verdade (sem tiara): triângulos em pé, borda de fora reta,
                 // rosinha por dentro.
                 {
-                    int[][] ear = {{-9, -3}, {-9, -4}, {-8, -4}, {-8, -5}, {-7, -5}, {-7, -6}, {-7, -7}};
+                    int[][] ear = CAT_EAR;
                     for (int i = 0; i < ear.length; i++) {
                         mirrorHline(canvas, cx, ear[i][0], ear[i][1], base - i, g.whitePaint);
                     }
@@ -899,8 +919,8 @@ public final class PetAccessoryRenderer {
 
             case HEAD_PROPELLER_CAP: {
                 // Boné de criança com hélice: gomos coloridos e hélice girando (1 quadro/s).
-                Paint[] slices = {g.capRedPaint, g.goldPaint, g.deepBluePaint, g.capGreenPaint};
-                int[] capWidths = {8, 7, 7, 6, 4};
+                Paint[] slices = propellerSlices;
+                int[] capWidths = PROPELLER_CAP_WIDTHS;
                 for (int i = 0; i < capWidths.length; i++) {
                     int hw = capWidths[i];
                     for (int x = cx + 1 - hw; x <= cx + hw; x++) {
@@ -1067,7 +1087,8 @@ public final class PetAccessoryRenderer {
                 drawGlassFrame(canvas, rx, eyeY, g.goldPaint, false);
                 g.hline(canvas, lx + 4, rx - 4, eyeY - 3, g.goldPaint);
                 // Estrelinhas em cima das lentes.
-                for (int ex : new int[]{lx, rx}) {
+                for (int side = 0; side < 2; side++) {
+                    int ex = side == 0 ? lx : rx;
                     g.px(canvas, ex, eyeY - 7, g.goldPaint);
                     g.hline(canvas, ex - 1, ex + 1, eyeY - 6, g.goldPaint);
                     g.px(canvas, ex, eyeY - 5, g.goldPaint);
@@ -1080,7 +1101,8 @@ public final class PetAccessoryRenderer {
 
             case EYES_DISGUISE:
                 // Óculos redondos de aro grosso com sobrancelhas peludas por cima.
-                for (int ex : new int[]{lx, rx}) {
+                for (int side = 0; side < 2; side++) {
+                    int ex = side == 0 ? lx : rx;
                     g.hline(canvas, ex - 2, ex + 2, eyeY - 4, g.patchPaint);
                     g.hline(canvas, ex - 2, ex + 2, eyeY + 3, g.patchPaint);
                     for (int y = eyeY - 3; y <= eyeY + 2; y++) {

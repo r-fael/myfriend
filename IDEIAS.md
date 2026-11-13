@@ -50,6 +50,16 @@ marcada, minijogo da coroa, comida paga a cada refeição, itens sazonais e item
 3. Cartão para compartilhar e tutorial.
 4. Testes automáticos.
 
+## Feito na 1.16
+
+- [x] **Menos quadros**: ações sem movimento rodam a 20 quadros por segundo e comer/beber a 30
+  (antes tudo a 60). No simulador, uma birra de 8 s caiu de 500 para 193 quadros.
+- [x] **Lembrete esperto**: com o app fechado, o relógio só acorda quando a fome ou a sede vão
+  chegar no limite (de 30 min a 2 h), em vez de a cada 30 min.
+- [x] **Sem alocação por quadro**: formas dos desenhos viraram constantes.
+- [x] **Documentação**: `docs/ARQUITETURA.md` e o diagrama `docs/como-funciona.excalidraw`.
+- [x] Ele guarda o que está segurando enquanto dorme (o objeto ficava cortado na borda).
+
 ## Feito na 1.13 (além dos marcados acima)
 
 - [x] **Chamar a atenção**: se ficar 3h+ sem abrir, ele fica de costas emburrado; um toque e ele se vira feliz.
