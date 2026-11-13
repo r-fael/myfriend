@@ -58,7 +58,7 @@ public final class PetConfig {
     public static final int CATEGORY_NOSE = 1;
     public static final int CATEGORY_EYES = 2;
     public static final int CATEGORY_NECK = 3;
-    public static final int CATEGORY_COLOR = 4;
+    public static final int CATEGORY_HOLD = 4;
     public static final int CATEGORY_BG = 5;
     public static final int CATEGORY_COUNT = 6;
 
@@ -82,6 +82,7 @@ public final class PetConfig {
     public static final int HEAD_PLUMBER_RED = 14;
     public static final int HEAD_PLUMBER_GREEN = 15;
     public static final int HEAD_CAT_EARS = 16;
+    public static final int HEAD_PROPELLER_CAP = 17;
     /** Id do cocar de carnaval (removido na v1.9), usado só para migrar o que estava salvo. */
     public static final int REMOVED_HEAD_CARNIVAL = 11;
     public static final int REMOVED_CARNIVAL_PRICE = 50;
@@ -109,10 +110,19 @@ public final class PetConfig {
     public static final int NECK_PACIFIER = 3;
     public static final int NECK_NECKLACE = 4;
 
-    // Cor do rostinho (0 = branco)
-    public static final int COLOR_PINK = 1;
-    public static final int COLOR_CYAN = 2;
-    public static final int COLOR_GOLD = 3;
+    // Coisas para segurar (ficam na "mãozinha" ao lado do rosto)
+    public static final int HOLD_FLOWER = 1;
+    public static final int HOLD_SWORD = 2;
+    public static final int HOLD_POTION = 3;
+    public static final int HOLD_WAND = 4;
+    public static final int HOLD_BALLOON = 5;
+    public static final int HOLD_LOLLIPOP = 6;
+    public static final int HOLD_ICE_CREAM = 7;
+    public static final int HOLD_MICROPHONE = 8;
+    public static final int HOLD_UMBRELLA = 9;
+
+    /** Cores do rostinho (removidas na v1.14): preço para devolver as moedas de quem comprou. */
+    public static final int[] REMOVED_COLOR_PRICES = {0, 40, 40, 60};
 
     // Fundo (0 = preto)
     public static final int BG_STARS = 1;
@@ -139,6 +149,7 @@ public final class PetConfig {
                     60, // boné vermelho de encanador
                     60, // boné verde de encanador
                     45, // orelhas de gatinho
+                    50, // boné de hélice
             },
             { // nariz
                     0,  // nada
@@ -163,11 +174,17 @@ public final class PetConfig {
                     25, // chupeta
                     45, // colar com pingente
             },
-            { // cor do rostinho
-                    0,  // branco
-                    40, // rosa
-                    40, // ciano
-                    60, // dourado
+            { // segurar
+                    0,  // nada
+                    25, // flor
+                    60, // espada
+                    45, // poção borbulhando
+                    50, // varinha mágica
+                    30, // balão
+                    20, // pirulito
+                    30, // sorvete
+                    40, // microfone
+                    45, // guarda-chuva
             },
             { // fundo
                     0,  // preto

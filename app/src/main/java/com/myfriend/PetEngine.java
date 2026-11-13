@@ -309,15 +309,6 @@ public final class PetEngine {
         }
     }
 
-    private Paint colorPaint(int colorItem) {
-        switch (colorItem) {
-            case COLOR_PINK: return grid.facePinkPaint;
-            case COLOR_CYAN: return grid.faceCyanPaint;
-            case COLOR_GOLD: return grid.faceGoldPaint;
-            default: return grid.whitePaint;
-        }
-    }
-
     // ================================================================= Bateria e passos
 
     public void refreshBatteryDirect() {
@@ -840,7 +831,7 @@ public final class PetEngine {
         updateRoutine(now, hudVisible);
         int mood = getCurrentMood(now);
         updateEyesAndBounce(physDt, now);
-        facePaint = colorPaint(shownItem(CATEGORY_COLOR));
+        facePaint = grid.whitePaint;
 
         // Zzz quando está dormindo (um a cada 1,8 s).
         if (mood == MOOD_SLEEPING && now / 1800L != lastZzzSlot) {
@@ -895,7 +886,7 @@ public final class PetEngine {
         }
         if (mood == MOOD_SULK) {
             accessories.drawSulkBack(canvas, cx, eyeY, now);
-            accessories.drawHeadItem(canvas, cx, eyeY, headItem);
+            accessories.drawHeadItem(canvas, cx, eyeY, headItem, now);
         } else {
             drawCheeks(canvas, cx, eyeY);
             drawEyes(canvas, lx, rx, eyeY, mood, now);
@@ -907,7 +898,12 @@ public final class PetEngine {
             }
             accessories.drawNoseItem(canvas, cx, eyeY, shownItem(CATEGORY_NOSE));
             accessories.drawEyesItem(canvas, lx, rx, eyeY, cx, shownItem(CATEGORY_EYES));
-            accessories.drawHeadItem(canvas, cx, eyeY, headItem);
+            accessories.drawHeadItem(canvas, cx, eyeY, headItem, now);
+            // Coisa na mãozinha (guarda enquanto come, bebe ou toma banho).
+            boolean handsBusy = mood == MOOD_EATING || mood == MOOD_DRINKING || mood == MOOD_SHOWERING;
+            if (!handsBusy) {
+                accessories.drawHoldItem(canvas, cx + 12, mouthY, shownItem(CATEGORY_HOLD), facePaint, now);
+            }
             drawMealProps(canvas, mood, cx, mouthY, now);
             drawMoodExtras(canvas, mood, cx, eyeY, mouthY, now);
         }
@@ -1667,7 +1663,7 @@ public final class PetEngine {
         drawShopTab(canvas, SPRITE_TAB_NOSE, CATEGORY_NOSE, grid.clownRedPaint);
         drawShopTab(canvas, SPRITE_TAB_EYE, CATEGORY_EYES, grid.cyanPaint);
         drawShopTab(canvas, SPRITE_TAB_NECK, CATEGORY_NECK, grid.redPaint);
-        drawShopTab(canvas, null, CATEGORY_COLOR, null);
+        drawShopTab(canvas, SPRITE_TAB_HOLD, CATEGORY_HOLD, grid.goldPaint);
         drawShopTab(canvas, SPRITE_TAB_BG, CATEGORY_BG, grid.lavenderPaint);
     }
 
@@ -1682,15 +1678,7 @@ public final class PetEngine {
         double angle = Math.toRadians(SHOP_TAB_DEG[category]);
         int x = (int) Math.round(GRID_SIZE / 2.0 + SHOP_TAB_RADIUS * Math.sin(angle) - 2.5);
         int y = (int) Math.round(GRID_SIZE / 2.0 + SHOP_TAB_RADIUS * Math.cos(angle) - 2.5);
-        if (sprite == null) {
-            // Aba de cor: quadradinho de 4 cores.
-            grid.rectPx(canvas, x, y, x + 1, y + 1, active ? grid.whitePaint : grid.dimPaint);
-            grid.rectPx(canvas, x + 3, y, x + 4, y + 1, active ? grid.facePinkPaint : grid.dimPaint);
-            grid.rectPx(canvas, x, y + 3, x + 1, y + 4, active ? grid.faceCyanPaint : grid.dimPaint);
-            grid.rectPx(canvas, x + 3, y + 3, x + 4, y + 4, active ? grid.faceGoldPaint : grid.dimPaint);
-        } else {
-            grid.drawSprite5x5(canvas, x, y, sprite, active ? activePaint : grid.dimPaint);
-        }
+        grid.drawSprite5x5(canvas, x, y, sprite, active ? activePaint : grid.dimPaint);
         if (active) {
             // Tracinho do lado de dentro do arco (virado para o bichinho).
             grid.hline(canvas, x + 1, x + 3, y - 2, grid.whitePaint);

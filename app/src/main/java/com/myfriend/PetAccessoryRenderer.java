@@ -184,6 +184,155 @@ public final class PetAccessoryRenderer {
     // ---------------------------------------------------------------- Pescoço, fundo e extras
 
     /**
+     * Coisa que ele segura numa "mãozinha" flutuando ao lado do rosto.
+     * Animações (bolhas, brilho, balão balançando) mudam 1 vez por segundo: não pedem quadros extras.
+     *
+     * @param x coluna da mãozinha
+     * @param y linha de cima da mãozinha (o objeto sai dela para cima)
+     */
+    public void drawHoldItem(Canvas canvas, int x, int y, int item, Paint handPaint, long now) {
+        if (item == ITEM_NONE) {
+            return;
+        }
+        long sec = now / 1000L;
+        switch (item) {
+            case HOLD_FLOWER:
+                g.vline(canvas, x, y - 5, y + 2, g.stemPaint);
+                g.px(canvas, x + 1, y - 3, g.stemPaint);
+                g.px(canvas, x + 2, y - 4, g.stemPaint);
+                g.px(canvas, x, y - 10, g.pinkPaint);
+                g.hline(canvas, x - 1, x + 1, y - 9, g.pinkPaint);
+                g.hline(canvas, x - 2, x + 2, y - 8, g.pinkPaint);
+                g.hline(canvas, x - 1, x + 1, y - 7, g.pinkPaint);
+                g.px(canvas, x, y - 6, g.pinkPaint);
+                g.px(canvas, x, y - 8, g.goldPaint);
+                break;
+
+            case HOLD_SWORD:
+                g.px(canvas, x, y - 13, g.whitePaint);
+                g.vline(canvas, x, y - 12, y - 3, g.silverPaint);
+                g.px(canvas, x + 1, y - 10, g.whitePaint); // reflexo na lâmina
+                g.hline(canvas, x - 2, x + 2, y - 2, g.goldPaint);
+                g.px(canvas, x, y - 1, g.woodPaint);
+                g.px(canvas, x, y + 2, g.goldPaint);
+                break;
+
+            case HOLD_POTION: {
+                g.px(canvas, x, y - 8, g.woodPaint);         // rolha
+                g.px(canvas, x, y - 7, g.glassPaint);        // gargalo
+                g.hline(canvas, x - 1, x + 1, y - 6, g.glassPaint);
+                for (int row = y - 5; row <= y - 2; row++) {
+                    g.px(canvas, x - 2, row, g.glassPaint);
+                    g.px(canvas, x + 2, row, g.glassPaint);
+                    g.hline(canvas, x - 1, x + 1, row, row == y - 5 ? g.glassPaint : g.purplePaint);
+                }
+                g.hline(canvas, x - 1, x + 1, y - 1, g.glassPaint);
+                g.px(canvas, x - 1, y - 3, g.whitePaint);    // brilho no vidro
+                // Bolhinha subindo (muda a cada segundo).
+                int phase = (int) (sec % 3L);
+                g.px(canvas, x + (phase == 1 ? 1 : 0), y - 9 - phase, g.lavenderPaint);
+                break;
+            }
+
+            case HOLD_WAND:
+                g.vline(canvas, x, y - 6, y + 2, g.woodPaint);
+                g.px(canvas, x, y - 7, g.whitePaint);
+                g.vline(canvas, x, y - 12, y - 8, g.goldPaint);
+                g.hline(canvas, x - 2, x + 2, y - 10, g.goldPaint);
+                g.px(canvas, x - 1, y - 11, g.goldPaint);
+                g.px(canvas, x + 1, y - 11, g.goldPaint);
+                g.px(canvas, x - 1, y - 9, g.goldPaint);
+                g.px(canvas, x + 1, y - 9, g.goldPaint);
+                g.px(canvas, x, y - 10, g.whitePaint);
+                // Brilhinho que pisca em volta da estrela.
+                if (sec % 2L == 0L) {
+                    g.px(canvas, x + 3, y - 13, g.whitePaint);
+                } else {
+                    g.px(canvas, x - 3, y - 8, g.whitePaint);
+                }
+                break;
+
+            case HOLD_BALLOON: {
+                int dx = sec % 2L == 0L ? 0 : 1; // balança com o vento
+                g.vline(canvas, x, y - 4, y + 1, g.glassPaint);
+                g.vline(canvas, x + dx, y - 8, y - 5, g.glassPaint);
+                int bx = x + dx;
+                g.px(canvas, bx, y - 9, g.capRedDarkPaint);  // nó
+                g.hline(canvas, bx - 1, bx + 1, y - 10, g.capRedPaint);
+                for (int row = y - 14; row <= y - 11; row++) {
+                    g.hline(canvas, bx - 2, bx + 2, row, g.capRedPaint);
+                }
+                g.hline(canvas, bx - 1, bx + 1, y - 15, g.capRedPaint);
+                g.px(canvas, bx - 1, y - 13, g.whitePaint);
+                break;
+            }
+
+            case HOLD_LOLLIPOP:
+                g.vline(canvas, x, y - 4, y + 2, g.whitePaint);
+                g.hline(canvas, x - 1, x + 1, y - 9, g.pinkPaint);
+                for (int row = y - 8; row <= y - 6; row++) {
+                    g.hline(canvas, x - 2, x + 2, row, g.pinkPaint);
+                }
+                g.hline(canvas, x - 1, x + 1, y - 5, g.pinkPaint);
+                // Espiral branca.
+                g.px(canvas, x, y - 7, g.whitePaint);
+                g.px(canvas, x + 1, y - 8, g.whitePaint);
+                g.px(canvas, x - 1, y - 6, g.whitePaint);
+                g.px(canvas, x + 1, y - 6, g.whitePaint);
+                break;
+
+            case HOLD_ICE_CREAM:
+                g.hline(canvas, x - 2, x + 2, y - 1, g.conePaint);
+                g.px(canvas, x, y + 2, g.conePaint);
+                g.hline(canvas, x - 1, x + 1, y - 5, g.blushPaint);
+                for (int row = y - 4; row <= y - 2; row++) {
+                    g.hline(canvas, x - 2, x + 2, row, g.blushPaint);
+                }
+                g.px(canvas, x + 2, y - 1, g.blushPaint);    // escorrendo
+                g.px(canvas, x, y - 6, g.redPaint);          // cereja
+                g.px(canvas, x - 1, y - 3, g.goldPaint);     // granulado
+                g.px(canvas, x + 1, y - 4, g.cyanPaint);
+                break;
+
+            case HOLD_MICROPHONE:
+                g.vline(canvas, x, y - 2, y + 2, g.dimPaint);
+                g.hline(canvas, x - 1, x + 1, y - 2, g.goldPaint);
+                for (int row = y - 5; row <= y - 3; row++) {
+                    g.hline(canvas, x - 1, x + 1, row, g.silverPaint);
+                }
+                g.px(canvas, x, y - 6, g.silverPaint);
+                g.px(canvas, x, y - 4, g.glassPaint);
+                // Notinha musical aparecendo e sumindo.
+                if (sec % 2L == 0L) {
+                    g.vline(canvas, x + 4, y - 9, y - 7, g.goldPaint);
+                    g.px(canvas, x + 5, y - 9, g.goldPaint);
+                    g.hline(canvas, x + 3, x + 4, y - 6, g.goldPaint);
+                }
+                break;
+
+            case HOLD_UMBRELLA:
+                g.vline(canvas, x, y - 9, y + 1, g.silverPaint);
+                g.px(canvas, x, y + 2, g.woodPaint);         // cabo em J
+                g.px(canvas, x - 1, y + 3, g.woodPaint);
+                g.px(canvas, x - 2, y + 2, g.woodPaint);
+                g.hline(canvas, x - 1, x + 1, y - 13, g.capRedPaint);
+                g.hline(canvas, x - 3, x + 3, y - 12, g.capRedPaint);
+                g.hline(canvas, x - 4, x + 4, y - 11, g.capRedPaint);
+                g.hline(canvas, x - 4, x + 4, y - 10, g.capRedPaint);
+                g.px(canvas, x - 2, y - 11, g.whitePaint);   // bolinhas
+                g.px(canvas, x + 2, y - 10, g.whitePaint);
+                g.px(canvas, x, y - 14, g.silverPaint);      // ponta
+                break;
+
+            default:
+                break;
+        }
+        // Mãozinha segurando (por cima do cabo).
+        g.hline(canvas, x - 1, x + 1, y, handPaint);
+        g.hline(canvas, x - 1, x + 1, y + 1, handPaint);
+    }
+
+    /**
      * Itens de boca/pescoço.
      *
      * @param mouthY linha de cima da boca
@@ -442,7 +591,7 @@ public final class PetAccessoryRenderer {
      * @param cx   centro do rosto (eixo de simetria em cx + 0.5)
      * @param eyeY linha central dos olhos
      */
-    public void drawHeadItem(Canvas canvas, int cx, int eyeY, int item) {
+    public void drawHeadItem(Canvas canvas, int cx, int eyeY, int item, long now) {
         int base = eyeY - 5; // linha da aba, logo acima dos olhos
 
         switch (item) {
@@ -627,15 +776,47 @@ public final class PetAccessoryRenderer {
                 break;
 
             case HEAD_CAT_EARS:
-                // Tiara com duas orelhas pontudas, borda de fora reta e rosinha por dentro.
-                band(canvas, cx, 7, base, g.pinkPaint);
-                for (int i = 1; i <= 6; i++) {
-                    mirrorHline(canvas, cx, -7, -1 - i, base - i, g.whitePaint);
-                }
-                for (int i = 2; i <= 4; i++) {
-                    mirrorHline(canvas, cx, -6, -2 - i, base - i, g.blushPaint);
+                // Orelhas de gato de verdade (sem tiara): triângulos em pé, borda de fora reta,
+                // rosinha por dentro.
+                {
+                    int[][] ear = {{-9, -3}, {-9, -4}, {-8, -4}, {-8, -5}, {-7, -5}, {-7, -6}, {-7, -7}};
+                    for (int i = 0; i < ear.length; i++) {
+                        mirrorHline(canvas, cx, ear[i][0], ear[i][1], base - i, g.whitePaint);
+                    }
+                    mirrorHline(canvas, cx, -7, -6, base - 2, g.blushPaint);
+                    mirrorHline(canvas, cx, -7, -6, base - 3, g.blushPaint);
+                    mirrorPx(canvas, cx, -6, base - 4, g.blushPaint);
                 }
                 break;
+
+            case HEAD_PROPELLER_CAP: {
+                // Boné de criança com hélice: gomos coloridos e hélice girando (1 quadro/s).
+                Paint[] slices = {g.capRedPaint, g.goldPaint, g.deepBluePaint, g.capGreenPaint};
+                int[] capWidths = {8, 7, 7, 6, 4};
+                for (int i = 0; i < capWidths.length; i++) {
+                    int hw = capWidths[i];
+                    for (int x = cx + 1 - hw; x <= cx + hw; x++) {
+                        int slice = Math.floorDiv(x - cx + 8, 4);
+                        g.px(canvas, x, base - i, slices[Math.floorMod(slice, slices.length)]);
+                    }
+                }
+                g.hline(canvas, cx + 2, cx + 10, base, g.capRedDarkPaint); // aba pra frente
+                g.hline(canvas, cx, cx + 1, base - 5, g.silverPaint);      // haste
+                switch ((int) ((now / 1000L) % 3L)) {
+                    case 0: // hélice de frente
+                        g.hline(canvas, cx - 4, cx, base - 6, g.redPaint);
+                        g.hline(canvas, cx + 1, cx + 5, base - 6, g.cyanPaint);
+                        break;
+                    case 1: // virando
+                        g.hline(canvas, cx - 2, cx, base - 6, g.cyanPaint);
+                        g.hline(canvas, cx + 1, cx + 3, base - 6, g.redPaint);
+                        break;
+                    default: // de lado
+                        g.hline(canvas, cx, cx + 1, base - 6, g.goldPaint);
+                        break;
+                }
+                break;
+            }
 
             default:
                 break;

@@ -21,7 +21,7 @@ Lista de melhorias futuras. Marque com `[x]` o que for feito.
 ## Loja
 
 - [x] **Nova categoria "boca/pescoço"**: gravatinha, cachecol, chupeta, colar.
-- [x] **Cor do bichinho**: olhos e boca hoje são brancos; comprar outras cores (rosa, ciano, dourado).
+- [x] **Coisas para segurar** (substituiu a cor do bichinho): flor, espada, poção borbulhando, varinha, balão, pirulito, sorvete, microfone e guarda-chuva.
 - [x] **Fundo**: estrelinhas, chuva ou neve bem sutis atrás dele.
 
 ## Watchface

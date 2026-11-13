@@ -27,6 +27,8 @@ public final class PixelGrid {
     public static final int[] SPRITE_TAB_EYE = {0, 14, 27, 14, 0};
     public static final int[] SPRITE_TAB_NECK = {17, 27, 31, 27, 17};
     public static final int[] SPRITE_TAB_BG = {4, 14, 31, 14, 10};
+    /** Aba "segurar": espadinha na diagonal. */
+    public static final int[] SPRITE_TAB_HOLD = {1, 2, 20, 8, 20};
     /** Tênis (passos do dia). */
     /** Marca de bravo (estilo mangá). */
     public static final int[] SPRITE_ANGER = {10, 27, 0, 27, 10};
@@ -45,9 +47,12 @@ public final class PixelGrid {
     public final Paint dimPaint = makePaint(0xFF444444);
     public final Paint ringTrackPaint = makePaint(0xFF1C1C1C);
     // Cores do rostinho.
-    public final Paint facePinkPaint = makePaint(0xFFFF9ACD);
-    public final Paint faceCyanPaint = makePaint(0xFF7DF3FF);
-    public final Paint faceGoldPaint = makePaint(0xFFFFD95A);
+    // Coisas para segurar.
+    public final Paint silverPaint = makePaint(0xFFCFD8DC);
+    public final Paint stemPaint = makePaint(0xFF2E9E5B);
+    public final Paint woodPaint = makePaint(0xFF5D4037);
+    public final Paint conePaint = makePaint(0xFFD69A4E);
+    public final Paint glassPaint = makePaint(0xFF90A4AE);
     // Fundos (bem apagadinhos para quase não gastar bateria no OLED).
     public final Paint starDimPaint = makePaint(0xFF4A4426);
     public final Paint starBrightPaint = makePaint(0xFFB8A64A);
@@ -130,6 +135,13 @@ public final class PixelGrid {
         float right = originX + (x1 + 1) * cellSize;
         float bottom = originY + (y1 + 1) * cellSize;
         canvas.drawRect(left, top, right, bottom, paint);
+    }
+
+    /** Linha vertical de pixels (y0 até y1, inclusive). */
+    public void vline(Canvas canvas, int x, int y0, int y1, Paint paint) {
+        for (int y = y0; y <= y1; y++) {
+            px(canvas, x, y, paint);
+        }
     }
 
     public void hline(Canvas canvas, int x0, int x1, int y, Paint paint) {

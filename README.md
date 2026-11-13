@@ -30,7 +30,7 @@ Bichinho virtual retrô desenhado numa grade LCD `52x52` para **Wear OS (Galaxy 
 - **Reage a você:** fica animado quando você caminha, comemora a meta de 6000 passos (+100 moedas), fica tonto se o pulso chacoalhar e segura um envelopinho quando chega mensagem.
 - **Personalidade:** cada dia sorteia um humor — normal, preguiçoso, elétrico ou carente.
 - **Sentimentos:** fica bravo se for cutucado demais (e a birra aumenta se continuar), triste sem carinho ou com cocô acumulado, e emburrado de costas se ficar 3h+ sem você olhar.
-- **Loja:** 6 categorias — chapéus, nariz, olhos, pescoço (gravatinha, cachecol, chupeta, colar), cor do rostinho (rosa, ciano, dourado) e fundo (estrelas, chuva, neve).
+- **Loja:** 6 categorias — chapéus (inclui orelhas de gatinho e boné de hélice que gira), nariz, olhos, pescoço (gravatinha, cachecol, chupeta, colar), coisas para segurar (flor, espada, poção, varinha, balão, pirulito, sorvete, microfone, guarda-chuva) e fundo (estrelas, chuva, neve).
 - **Watch Face:** relógio, data, anel de bateria na borda e modo tela desligada em cinza que muda só uma vez por minuto.
 - **Backup:** moedas, itens e status entram no backup do relógio.
 

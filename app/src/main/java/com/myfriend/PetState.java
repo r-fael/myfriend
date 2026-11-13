@@ -37,9 +37,9 @@ public final class PetState {
     public boolean nightSleep = false;
 
     private static final String[] KEY_EQUIPPED = {"equippedHead", "equippedNose", "equippedEyes",
-            "equippedNeck", "equippedColor", "equippedBg"};
+            "equippedNeck", "equippedHold", "equippedBg"};
     private static final String[] KEY_UNLOCKED = {"unlockedHead", "unlockedNose", "unlockedEyes",
-            "unlockedNeck", "unlockedColor", "unlockedBg"};
+            "unlockedNeck", "unlockedHold", "unlockedBg"};
 
     {
         equipped[CATEGORY_HEAD] = HEAD_SANTA_HAT;
@@ -110,6 +110,15 @@ public final class PetState {
             if (itemsVersion < 3) {
                 removeHeadItem(REMOVED_HEAD_DIVINE_WHEEL, REMOVED_DIVINE_WHEEL_PRICE);
             }
+            if (itemsVersion < 4) {
+                // A loja de cores saiu: devolve as moedas de cada cor comprada.
+                int colors = prefs.getInt("unlockedColor", 0b1);
+                for (int i = 1; i < REMOVED_COLOR_PRICES.length; i++) {
+                    if (((colors >> i) & 1) != 0) {
+                        coins += REMOVED_COLOR_PRICES[i];
+                    }
+                }
+            }
         }
         for (int c = 0; c < CATEGORY_COUNT; c++) {
             unlocked[c] |= 1; // "nada" sempre disponível
@@ -152,9 +161,11 @@ public final class PetState {
                 .putInt("stretchDay", stretchDay)
                 .putLong("lastSeenWall", lastSeenWall)
                 .putBoolean("nightSleep", nightSleep)
-                .putInt("itemsVersion", 3)
+                .putInt("itemsVersion", 4)
                 .remove("equippedItem")
                 .remove("unlockedMask")
+                .remove("equippedColor")
+                .remove("unlockedColor")
                 .putLong("savedTime", System.currentTimeMillis())
                 .apply();
     }
